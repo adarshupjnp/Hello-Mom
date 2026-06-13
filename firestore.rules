@@ -1,0 +1,72 @@
+rules_version = '2';
+
+// HelloMom+ Firestore security rules.
+//
+// Model: a small, trusted family app with one pregnancy "owner" (Adarsh / Riya)
+// and read-only family members who track the owner's data. Family members must be
+// able to READ the owner's whole data tree and the owner discovers/links members by
+// scanning the users collection — so reads are broad (any signed-in user). WRITES are
+// restricted to each user's own tree, with two deliberate cross-user exceptions:
+//   1. a family member registering their own contact card under the owner, and
+//   2. the shared top-level `reminders` collection (each doc carries its creator's uid).
+//
+// NOTE: this is intentionally permissive for a trusted-family use case. It is NOT
+// suitable as-is for a public, multi-tenant product.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // ---- User profiles + all per-user tracking subcollections ----
+    match /users/{userId} {
+      // Family members read the owner's profile; the app also lists this collection
+      // to discover the owner by name.
+      allow read: if signedIn();
+      // Only the account holder may create/edit their own profile document.
+      allow write: if signedIn() && request.auth.uid == userId;
+
+      // Family contact cards (doc id = member's uid). A member registers themselves
+      // under the owner, and the owner manages the roster, so any signed-in user may
+      // write here.
+      match /family_members/{memberId} {
+        allow read: if signedIn();
+        allow write: if signedIn();
+      }
+
+      // Owner's health/tracking data (appointments, medicines, symptoms, reports,
+      // meals, water_intake, bills, health_metrics, kicks, ...). Readable by any
+      // signed-in family member; writable only by the owner of this user tree.
+      match /{collection}/{docId} {
+        allow read: if signedIn();
+        allow write: if signedIn() && request.auth.uid == userId;
+      }
+    }
+
+    // ---- Reminders: top-level collection keyed by a `userId` field ----
+    match /reminders/{reminderId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // ---- Family groups & invite codes (needed for the join flow) ----
+    match /families/{familyId} {
+      allow read, write: if signedIn();
+      match /members/{memberId} {
+        allow read, write: if signedIn();
+      }
+    }
+    match /invites/{code} {
+      allow read, write: if signedIn();
+    }
+
+    // ---- Static reference data (weekly pregnancy milestones) ----
+    match /pregnancy_progress/{week} {
+      allow read: if signedIn();
+      allow write: if false; // seed/manage from the console only
+    }
+  }
+}
