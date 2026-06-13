@@ -63,6 +63,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.adarsh.hellomom.R
@@ -253,11 +254,13 @@ private fun BabyProgressRing(
         label = "BabyPulseScale"
     )
 
-    val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+    val trackColor = Color(0xFFE9A57D).copy(alpha = 0.15f)
     val innerBrush = Brush.radialGradient(
         colors = listOf(
-            Primary.copy(alpha = 0.18f),
-            MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+            Color(0xFFFFFDF9), // Glowing center
+            Color(0xFFFFE0C2), // Warm peach
+            Color(0xFFE9A57D).copy(alpha = 0.4f), // Soft edge
+            Color.Transparent
         )
     )
 
@@ -330,12 +333,11 @@ private fun BabyProgressRing(
                 painter = painterResource(id = R.drawable.ic_baby_transparent),
                 contentDescription = "Baby",
                 modifier = Modifier
-                    .size(100.dp) // Reduced size to allow space for future fruit icons
+                    .size(150.dp)
                     .scale(pulse)
                     .graphicsLayer(alpha = 0.99f)
                     .drawWithContent {
                         drawContent()
-                        // Fix "black spot": Broadened opaque area (0.95f) to ensure head isn't masked
                         drawCircle(
                             brush = Brush.radialGradient(
                                 0.0f to Color.White,
@@ -349,13 +351,14 @@ private fun BabyProgressRing(
             Text(
                 text = "Week $week",
                 style = MaterialTheme.typography.headlineSmall,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = Color.White
             )
             Text(
                 text = "Day $dayOfWeek • of 40 weeks",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.White.copy(alpha = 0.85f),
                 textAlign = TextAlign.Center
             )
         }
