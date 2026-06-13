@@ -8,6 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,7 +27,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.MonitorWeight
@@ -47,6 +47,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -55,12 +56,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.adarsh.hellomom.R
 import com.adarsh.hellomom.navigation.Screen
 import com.adarsh.hellomom.presentation.components.AppBottomNavBar
 import com.adarsh.hellomom.presentation.components.AppTab
@@ -257,7 +262,7 @@ private fun BabyProgressRing(
     )
 
     Box(
-        modifier = Modifier.size(260.dp),
+        modifier = Modifier.size(300.dp),
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -309,37 +314,52 @@ private fun BabyProgressRing(
             }
         }
 
-        // Soft inner glow + week readout.
-        Box(
-            modifier = Modifier
-                .size(190.dp)
-                .clip(CircleShape)
-                .background(innerBrush),
-            contentAlignment = Alignment.Center
+    Box(
+        modifier = Modifier
+            .size(250.dp)
+            .clip(CircleShape)
+            .background(innerBrush)
+            .padding(bottom = 24.dp), // Added margin from bottom ring
+        contentAlignment = Alignment.BottomCenter // Push content towards bottom
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Bottom
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    imageVector = Icons.Default.ChildCare,
-                    contentDescription = "Baby",
-                    tint = Primary,
-                    modifier = Modifier
-                        .size(46.dp)
-                        .scale(pulse)
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "Week $week",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "Day $dayOfWeek • of 40 weeks",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Image(
+                painter = painterResource(id = R.drawable.ic_baby_transparent),
+                contentDescription = "Baby",
+                modifier = Modifier
+                    .size(100.dp) // Reduced size to allow space for future fruit icons
+                    .scale(pulse)
+                    .graphicsLayer(alpha = 0.99f)
+                    .drawWithContent {
+                        drawContent()
+                        // Fix "black spot": Broadened opaque area (0.95f) to ensure head isn't masked
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                0.0f to Color.White,
+                                0.95f to Color.White,
+                                1.0f to Color.Transparent
+                            ),
+                            blendMode = BlendMode.DstIn
+                        )
+                    }
+            )
+            Text(
+                text = "Week $week",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "Day $dayOfWeek • of 40 weeks",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
         }
+    }
     }
 }
 
