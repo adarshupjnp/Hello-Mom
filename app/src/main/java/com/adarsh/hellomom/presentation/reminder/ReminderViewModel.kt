@@ -115,7 +115,7 @@ class ReminderViewModel @Inject constructor(
             authRepository.getCurrentUser().collectLatest { user ->
                 user?.let {
                     val wasOwner = _isOwner.value
-                    _isOwner.value = com.adarsh.hellomom.core.RoleManager.isOwnerName(it.fullName)
+                    _isOwner.value = com.adarsh.hellomom.core.RoleManager.isOwnerUser(it.fullName, it.email)
                     // Trigger daily reminders immediately when owner status is first confirmed
                     if (_isOwner.value && !wasOwner) {
                         initializeDailyReminders()

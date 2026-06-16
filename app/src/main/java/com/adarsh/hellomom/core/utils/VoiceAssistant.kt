@@ -50,7 +50,8 @@ class VoiceAssistant @Inject constructor(
     fun speak(text: String) {
         if (isTtsReady) {
             updateLanguage() // Ensure language is correct before speaking
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+            // Drop emojis/icons so TTS doesn't read them aloud (e.g. ❤️ as "dil").
+            tts?.speak(sanitizeForSpeech(text), TextToSpeech.QUEUE_FLUSH, null, null)
         }
     }
 

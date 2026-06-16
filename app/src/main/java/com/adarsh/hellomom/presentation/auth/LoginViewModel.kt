@@ -62,7 +62,7 @@ class LoginViewModel @Inject constructor(
             setState { copy(isLoading = true, error = null) }
             val result = authRepository.login(uiState.value.email, uiState.value.password)
             result.onSuccess { user ->
-                val isOwner = com.adarsh.hellomom.core.RoleManager.isOwnerName(user.fullName)
+                val isOwner = com.adarsh.hellomom.core.RoleManager.isOwnerUser(user.fullName, user.email)
 
                 if (isOwner && user.pregnancyStartDate == null) {
                     setEffect { LoginEffect.NavigateToProfileCreation }
@@ -81,7 +81,7 @@ class LoginViewModel @Inject constructor(
             setState { copy(isLoading = true, error = null) }
             val result = authRepository.loginWithGoogle(idToken)
             result.onSuccess { user ->
-                val isOwner = com.adarsh.hellomom.core.RoleManager.isOwnerName(user.fullName)
+                val isOwner = com.adarsh.hellomom.core.RoleManager.isOwnerUser(user.fullName, user.email)
 
                 if (isOwner && user.pregnancyStartDate == null) {
                     setEffect { LoginEffect.NavigateToProfileCreation }

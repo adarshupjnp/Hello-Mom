@@ -13,6 +13,7 @@ data class MealEntity(
     val mealType: String = "", // Breakfast, Lunch, Dinner, Snack
     val foodItems: String = "",
     val timing: String = "",
+    val daysOfWeek: String = "", // comma-separated weekdays the meal is planned for, e.g. "Mon,Wed,Fri"
     val isTaken: Boolean = false,
     val waterIntake: Int = 0,
 

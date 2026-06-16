@@ -25,7 +25,7 @@ enum class AppTab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home),
     ACTIONS("Quick Actions", Icons.Default.GridView),
     BABY("Baby", Icons.Default.ChildCare),
-    HEALTH("Your Health", Icons.Default.MonitorHeart),
+    HEALTH("Health", Icons.Default.MonitorHeart),
     PROFILE("Profile", Icons.Default.Person)
 }
 

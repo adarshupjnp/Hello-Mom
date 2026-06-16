@@ -7,6 +7,7 @@ import android.speech.tts.UtteranceProgressListener
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.adarsh.hellomom.R
+import com.adarsh.hellomom.core.utils.sanitizeForSpeech
 import com.adarsh.hellomom.domain.usecase.GenerateBabyMessageUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -67,9 +68,11 @@ class BabyVoiceViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(status = VoiceStatus.Generating) }
             val message = generateBabyMessageUseCase.execute(week, weight)
+            // Keep the emoji-rich message for on-screen display, but speak a cleaned
+            // version so TTS doesn't narrate "❤️"/"💕" as the word "dil".
             _uiState.update { it.copy(message = message) }
-            
-            tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "BABY_VOICE")
+
+            tts?.speak(sanitizeForSpeech(message), TextToSpeech.QUEUE_FLUSH, null, "BABY_VOICE")
         }
     }
 

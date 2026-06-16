@@ -66,21 +66,28 @@ class ReminderReceiver : BroadcastReceiver() {
     private fun handleAutoSnoozeCheck(context: Context, reminderId: Int) {
         CoroutineScope(Dispatchers.IO).launch {
             val reminder = reminderDao.getReminderById(reminderId) ?: return@launch
-            if (reminder.status == ReminderStatus.PENDING) {
-                // Auto-snooze once
+            // Already handled by the user → nothing to do.
+            if (reminder.status == ReminderStatus.COMPLETED) return@launch
+
+            val now = System.currentTimeMillis()
+            if (reminder.snoozeCount >= NotificationActionReceiver.MAX_SNOOZE_COUNT) {
+                // Snooze cap reached and the reminder is still unhandled → leave it PENDING so it
+                // surfaces for the user, rather than snoozing/expiring it indefinitely.
+                if (reminder.status != ReminderStatus.PENDING) {
+                    reminderDao.updateReminder(reminder.copy(status = ReminderStatus.PENDING, updatedAt = now))
+                }
+            } else {
+                // No response within the hour → auto-snooze once more (counts toward the cap). The
+                // rescheduled trigger re-arms its own auto-snooze check via handleReminderTrigger().
                 val snoozedReminder = reminder.copy(
                     status = ReminderStatus.SNOOZED,
-                    snoozedUntil = System.currentTimeMillis() + 3600000,
-                    updatedAt = System.currentTimeMillis()
+                    time = now + 3600000,
+                    snoozedUntil = now + 3600000,
+                    snoozeCount = reminder.snoozeCount + 1,
+                    updatedAt = now
                 )
                 reminderDao.updateReminder(snoozedReminder)
                 reminderManager.scheduleReminder(snoozedReminder)
-            } else if (reminder.status == ReminderStatus.SNOOZED) {
-                // If still snoozed after the second check (1h later), mark as EXPIRED
-                reminderDao.updateReminder(reminder.copy(
-                    status = ReminderStatus.EXPIRED,
-                    updatedAt = System.currentTimeMillis()
-                ))
             }
         }
     }

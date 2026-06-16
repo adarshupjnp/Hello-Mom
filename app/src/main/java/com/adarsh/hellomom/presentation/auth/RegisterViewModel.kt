@@ -54,7 +54,7 @@ class RegisterViewModel @Inject constructor(
             )
             val result = authRepository.register(user, uiState.value.password)
             result.onSuccess {
-                val isOwner = com.adarsh.hellomom.core.RoleManager.isOwnerName(user.fullName)
+                val isOwner = com.adarsh.hellomom.core.RoleManager.isOwnerUser(user.fullName, user.email)
 
                 if (isOwner) {
                     setEffect { RegisterEffect.NavigateToProfileCreation }

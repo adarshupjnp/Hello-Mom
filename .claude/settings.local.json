@@ -81,7 +81,12 @@
       "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; $env:Path = \"$env:JAVA_HOME\\\\bin;$env:Path\"; .\\\\gradlew.bat assembleDebug --console=plain)",
       "Bash(xargs grep -l -i \"navController\\\\|NavHost\\\\|composable\\(\")",
       "Bash(./gradlew :app:assembleDebug -q)",
-      "PowerShell($env:JAVA_HOME = 'C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr'; .\\\\gradlew.bat assembleDebug)"
+      "PowerShell($env:JAVA_HOME = 'C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr'; .\\\\gradlew.bat assembleDebug)",
+      "PowerShell(.\\\\gradlew.bat assembleDebug -q 2>&1 | Select-Object -Last 40)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; .\\\\gradlew.bat assembleDebug 2>&1 | Select-Object -Last 40)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; .\\\\gradlew.bat assembleDebug 2>&1 | Select-Object -Last 25)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; .\\\\gradlew.bat assembleDebug 2>&1 | Select-Object -Last 35)",
+      "PowerShell(& \"D:\\\\adarsh_workspace\\\\Important Doc file\\\\Practice\\\\Hello Mom+\\\\gradlew.bat\" assembleDebug 2>&1 | Select-Object -Last 45)"
     ]
   }
 }

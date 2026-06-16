@@ -13,6 +13,8 @@ sealed class DashboardIntent : UiIntent {
     data class UpdateSleep(val hours: Float) : DashboardIntent()
     data class UpdateWeight(val kg: Float) : DashboardIntent()
     data class UpdateSteps(val steps: Int) : DashboardIntent()
+    /** Owner toggles an Upcoming card (appointment/medicine) done for today. */
+    data class ToggleUpcomingDone(val type: String, val refId: String, val isDone: Boolean) : DashboardIntent()
     object Refresh : DashboardIntent()
 }
 
@@ -30,6 +32,8 @@ data class DashboardState(
     val medicines: List<MedicineEntity> = emptyList(),
     val symptoms: List<SymptomLogEntity> = emptyList(),
     val familyMembers: List<FamilyMemberEntity> = emptyList(),
+    /** refIds (appointmentId / medicineId) marked done TODAY, from daily_schedule_status. */
+    val doneToday: Set<String> = emptySet(),
     val kickCount: Int = 0,
     val isLoading: Boolean = false,
     val isSyncing: Boolean = false,

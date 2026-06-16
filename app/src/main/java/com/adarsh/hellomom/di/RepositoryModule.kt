@@ -15,6 +15,7 @@ import com.adarsh.hellomom.data.repository.SyncRepositoryImpl
 import com.adarsh.hellomom.data.repository.ContractionRepositoryImpl
 import com.adarsh.hellomom.data.repository.JournalRepositoryImpl
 import com.adarsh.hellomom.data.repository.DocumentRepositoryImpl
+import com.adarsh.hellomom.data.repository.ScheduleRepositoryImpl
 import com.adarsh.hellomom.domain.repository.AppointmentRepository
 import com.adarsh.hellomom.domain.repository.AuthRepository
 import com.adarsh.hellomom.domain.repository.BillingRepository
@@ -30,6 +31,7 @@ import com.adarsh.hellomom.domain.repository.SyncRepository
 import com.adarsh.hellomom.domain.repository.ContractionRepository
 import com.adarsh.hellomom.domain.repository.JournalRepository
 import com.adarsh.hellomom.domain.repository.DocumentRepository
+import com.adarsh.hellomom.domain.repository.ScheduleRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -129,4 +131,10 @@ abstract class RepositoryModule {
     abstract fun bindDocumentRepository(
         documentRepositoryImpl: DocumentRepositoryImpl
     ): DocumentRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindScheduleRepository(
+        scheduleRepositoryImpl: ScheduleRepositoryImpl
+    ): ScheduleRepository
 }

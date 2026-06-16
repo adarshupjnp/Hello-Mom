@@ -19,9 +19,10 @@ import com.adarsh.hellomom.data.local.entity.*
         SymptomLogEntity::class,
         ReminderEntity::class,
         ContractionEntity::class,
-        JournalEntity::class
+        JournalEntity::class,
+        DailyScheduleStatusEntity::class
     ],
-    version = 8,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -38,4 +39,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun reminderDao(): ReminderDao
     abstract fun contractionDao(): ContractionDao
     abstract fun journalDao(): JournalDao
+    abstract fun dailyScheduleStatusDao(): DailyScheduleStatusDao
 }

@@ -24,7 +24,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -43,7 +42,6 @@ import com.adarsh.hellomom.core.utils.PregnancyDataEngine
 import com.adarsh.hellomom.data.local.PreferenceManager
 import com.adarsh.hellomom.data.local.entity.*
 import com.adarsh.hellomom.domain.repository.MotherHealthData
-import com.adarsh.hellomom.domain.repository.PregnancyWeekData
 import com.adarsh.hellomom.navigation.Screen
 import com.adarsh.hellomom.presentation.components.DashboardShimmer
 import com.adarsh.hellomom.presentation.components.AppFooter
@@ -51,6 +49,7 @@ import com.adarsh.hellomom.presentation.components.AiWebView
 import com.adarsh.hellomom.presentation.components.AppBottomNavBar
 import com.adarsh.hellomom.presentation.components.AppTab
 import com.adarsh.hellomom.presentation.components.NAV_SELECTED_TAB_KEY
+import com.adarsh.hellomom.presentation.schedule.TodayScheduleSection
 import com.adarsh.hellomom.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -154,18 +153,6 @@ fun DashboardScreen(
             selectedIndex = AppTab.HOME.ordinal
         }
     }
-
-    // Heartbeat pulse animation for the baby icon
-    val infiniteTransition = rememberInfiniteTransition(label = "Heartbeat")
-    val heartScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "Pulse"
-    )
 
     Scaffold(
         topBar = {
@@ -284,8 +271,10 @@ fun DashboardScreen(
                     when (tab) {
                         AppTab.HOME -> HomeTabContent(
                             state = state,
-                            heartScale = heartScale,
-                            contentPadding = paddingValues
+                            contentPadding = paddingValues,
+                            onToggleDone = { type, refId, isDone ->
+                                viewModel.sendIntent(DashboardIntent.ToggleUpcomingDone(type, refId, isDone))
+                            }
                         )
                         AppTab.ACTIONS -> QuickActionsTabContent(
                             navController = navController,
@@ -310,8 +299,10 @@ fun DashboardScreen(
                         // selecting the tab, but the when must stay exhaustive.
                         AppTab.BABY -> HomeTabContent(
                             state = state,
-                            heartScale = heartScale,
-                            contentPadding = paddingValues
+                            contentPadding = paddingValues,
+                            onToggleDone = { type, refId, isDone ->
+                                viewModel.sendIntent(DashboardIntent.ToggleUpcomingDone(type, refId, isDone))
+                            }
                         )
                     }
                 }
@@ -368,14 +359,14 @@ private fun AiProviderChooser(
 
 /* ----------------------------------------------------------------------------
  * HOME TAB
- * Week progress · Baby's development · Hear your baby · Your body this week ·
- * Trimester · Upcoming things · Contact family/owner · Motivation & quote.
+ * Week progress · Your body this week ·
+ * Upcoming things · Contact family/owner · Motivation & quote.
  * -------------------------------------------------------------------------- */
 @Composable
 private fun HomeTabContent(
     state: DashboardState,
-    heartScale: Float,
-    contentPadding: PaddingValues
+    contentPadding: PaddingValues,
+    onToggleDone: (type: String, refId: String, isDone: Boolean) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -387,24 +378,14 @@ private fun HomeTabContent(
         // A. Week Progress (current week + progress indicator/timeline)
         item { HeaderSection(state) }
 
-        // B. Baby's Development
-        item { BabyDevelopmentSection(state.weekData, heartScale) }
-
-        // C. Hear Your Baby
-        item { HearYourBabyCard(state.pregnancyWeek, state.weekData.babyWeight) }
-
-        // D. Your Body This Week
-        item { MotherBodyChangesCard(state.pregnancyWeek) }
-
-        // E. Trimester information card
-        item { TrimesterProgressCard(state.trimester, state.pregnancyWeek) }
-
-        // F. Upcoming Things (appointments, medicines, reminders, checkups…)
+        // C. Upcoming Things (appointments, medicines, reminders, checkups…)
         item {
             UpcomingThingsSection(
                 appointments = state.appointments,
                 medicines = state.medicines,
-                hasAccess = state.hasFullAccess
+                hasAccess = state.hasFullAccess,
+                doneToday = state.doneToday,
+                onToggleDone = onToggleDone
             )
         }
 
@@ -417,7 +398,6 @@ private fun HomeTabContent(
         }
 
         // H. Motivation / Quote
-        item { MotivationCard() }
         item { DailyQuoteSection(state.quote) }
 
         item { AppFooter() }
@@ -433,7 +413,9 @@ private fun HomeTabContent(
 private fun UpcomingThingsSection(
     appointments: List<AppointmentEntity>,
     medicines: List<MedicineEntity>,
-    hasAccess: Boolean
+    hasAccess: Boolean,
+    doneToday: Set<String>,
+    onToggleDone: (type: String, refId: String, isDone: Boolean) -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -441,11 +423,28 @@ private fun UpcomingThingsSection(
     ) {
         SectionHeader(icon = Icons.Default.Upcoming, title = "Upcoming")
 
-        if (appointments.isNotEmpty()) {
-            UpcomingAppointmentCard(appointments.first())
+        // Show every appointment and medicine that hasn't passed yet (the ViewModel already
+        // filtered out past items), not just the first of each. Each card carries an owner-only
+        // done checkbox whose state comes from today's daily_schedule_status marks.
+        appointments.forEach { appointment ->
+            UpcomingAppointmentCard(
+                appointment = appointment,
+                hasAccess = hasAccess,
+                isDone = doneToday.contains(appointment.appointmentId),
+                onToggleDone = { checked ->
+                    onToggleDone(UPCOMING_TYPE_APPOINTMENT, appointment.appointmentId, checked)
+                }
+            )
         }
-        if (medicines.isNotEmpty()) {
-            MedicineReminderCard(medicines.first(), hasAccess)
+        medicines.forEach { medicine ->
+            MedicineReminderCard(
+                medicine = medicine,
+                hasAccess = hasAccess,
+                isDone = doneToday.contains(medicine.medicineId),
+                onToggleDone = { checked ->
+                    onToggleDone(UPCOMING_TYPE_MEDICINE, medicine.medicineId, checked)
+                }
+            )
         }
         if (appointments.isEmpty() && medicines.isEmpty()) {
             Card(
@@ -586,6 +585,9 @@ private fun YourHealthTabContent(
                 onUpdateSteps = onUpdateSteps
             )
         }
+
+        // Today's Schedule: daily medicine/meal/routine checklist (self-contained, owner-mark only).
+        item { TodayScheduleSection() }
 
         // Baby movement tracking.
         if (state.pregnancyWeek >= 18) {
@@ -1185,44 +1187,6 @@ fun MotherBodyChangesCard(week: Int) {
 }
 
 @Composable
-fun TrimesterProgressCard(trimester: Int, week: Int) {
-    val trimesterName = when(trimester) {
-        1 -> "First Trimester"
-        2 -> "Second Trimester"
-        else -> "Third Trimester"
-    }
-    
-    val trimesterWeeks = when(trimester) {
-        1 -> 1..13
-        2 -> 14..27
-        else -> 28..40
-    }
-    
-    val progressInTrimester = ((week - trimesterWeeks.first).toFloat() / (trimesterWeeks.last - trimesterWeeks.first).toFloat()).coerceIn(0f, 1f)
-
-    Card(
-        modifier = Modifier.fillMaxWidth().shadow(elevation = 4.dp, shape = RoundedCornerShape(24.dp)),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBG)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = trimesterName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { progressInTrimester },
-                modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
-                color = MaterialTheme.colorScheme.tertiary
-            )
-            Text(
-                text = "${trimesterWeeks.last - week} weeks to go in this trimester",
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.align(Alignment.End).padding(top = 4.dp)
-            )
-        }
-    }
-}
-
-@Composable
 fun HeaderSection(state: DashboardState) {
     val trimesterColor = when (state.trimester) {
         1 -> Color(0xFFFFD1DC)
@@ -1254,10 +1218,43 @@ fun HeaderSection(state: DashboardState) {
                         modifier = Modifier.size(60.dp)
                     )
                 }
-                
+
+                if (state.weekData.babyWeight.isNotBlank() || state.weekData.babyLength.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (state.weekData.babySize.isNotBlank()) {
+                            BabyStatPill(
+                                icon = Icons.Default.Eco,
+                                label = "Size",
+                                value = state.weekData.babySize,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (state.weekData.babyWeight.isNotBlank()) {
+                            BabyStatPill(
+                                icon = Icons.Default.MonitorWeight,
+                                label = "Weight",
+                                value = state.weekData.babyWeight,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (state.weekData.babyLength.isNotBlank()) {
+                            BabyStatPill(
+                                icon = Icons.Default.Straighten,
+                                label = "Length",
+                                value = state.weekData.babyLength,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
-                LinearProgressIndicator( 
+
+                LinearProgressIndicator(
                     progress = { state.pregnancyWeek / 40f },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1282,45 +1279,40 @@ fun HeaderSection(state: DashboardState) {
 }
 
 @Composable
-fun BabyDevelopmentSection(data: PregnancyWeekData, heartScale: Float) {
-    Card(
-        modifier = Modifier.fillMaxWidth().shadow(elevation = 4.dp, shape = RoundedCornerShape(24.dp)),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+private fun BabyStatPill(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.Favorite, 
-                    contentDescription = null, 
-                    tint = Color.Red,
-                    modifier = Modifier.size(24.dp).graphicsLayer(scaleX = heartScale, scaleY = heartScale)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "Baby's Development", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                DevelopmentMetric(label = "Weight", value = data.babyWeight, modifier = Modifier.weight(1f))
-                DevelopmentMetric(label = "Length", value = data.babyLength, modifier = Modifier.weight(1f))
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Text(text = "Milestone: ${data.weeklyMilestone}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(text = data.organDevelopment, style = MaterialTheme.typography.bodySmall)
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(16.dp)
+        )
+        Column {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+            Text(
+                text = value,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
         }
-    }
-}
-
-@Composable
-fun DevelopmentMetric(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-        Text(text = value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -1426,9 +1418,10 @@ fun WaterGlassesCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(elevation = 2.dp, shape = RoundedCornerShape(20.dp)),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBG)
+            .shadow(elevation = 6.dp, shape = RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBG),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1573,9 +1566,10 @@ fun HealthCard(
     onClick: () -> Unit = {}
 ) {
     Card(
-        modifier = modifier.clickable { onClick() }.shadow(elevation = 2.dp, shape = RoundedCornerShape(20.dp)),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBG)
+        modifier = modifier.clickable { onClick() }.shadow(elevation = 6.dp, shape = RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBG),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
@@ -1588,8 +1582,44 @@ fun HealthCard(
     }
 }
 
+/** daily_schedule_status `type` values for the Upcoming cards (kept distinct from the schedule feature's enum). */
+private const val UPCOMING_TYPE_APPOINTMENT = "APPOINTMENT"
+private const val UPCOMING_TYPE_MEDICINE = "MEDICINE"
+
+/**
+ * Done control for an Upcoming card: the OWNER gets a tappable checkbox (turns into a green tick),
+ * while read-only family members see the resulting state as a green check (done) or a faint
+ * pending circle — so they see the owner's reflection without being able to change it.
+ */
 @Composable
-fun MedicineReminderCard(medicine: MedicineEntity, hasAccess: Boolean) {
+private fun UpcomingDoneControl(
+    isDone: Boolean,
+    hasAccess: Boolean,
+    onToggleDone: (Boolean) -> Unit
+) {
+    val doneGreen = Color(0xFF2E7D32)
+    if (hasAccess) {
+        Checkbox(
+            checked = isDone,
+            onCheckedChange = { onToggleDone(it) },
+            colors = CheckboxDefaults.colors(checkedColor = doneGreen)
+        )
+    } else {
+        Icon(
+            imageVector = if (isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+            contentDescription = if (isDone) "Done" else "Pending",
+            tint = if (isDone) doneGreen else MaterialTheme.colorScheme.outline
+        )
+    }
+}
+
+@Composable
+fun MedicineReminderCard(
+    medicine: MedicineEntity,
+    hasAccess: Boolean,
+    isDone: Boolean,
+    onToggleDone: (Boolean) -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth().shadow(elevation = 2.dp, shape = RoundedCornerShape(20.dp)),
         shape = RoundedCornerShape(20.dp),
@@ -1614,19 +1644,18 @@ fun MedicineReminderCard(medicine: MedicineEntity, hasAccess: Boolean) {
                 Text(text = medicine.name, fontWeight = FontWeight.Bold)
                 Text(text = medicine.timing, style = MaterialTheme.typography.bodySmall)
             }
-            if (hasAccess && !medicine.isCompleted) {
-                Button(onClick = { /* Mark as taken */ }) {
-                    Text("Take")
-                }
-            } else if (medicine.isCompleted) {
-                Icon(Icons.Default.CheckCircle, contentDescription = "Taken", tint = Color.Green)
-            }
+            UpcomingDoneControl(isDone = isDone, hasAccess = hasAccess, onToggleDone = onToggleDone)
         }
     }
 }
 
 @Composable
-fun UpcomingAppointmentCard(appointment: AppointmentEntity) {
+fun UpcomingAppointmentCard(
+    appointment: AppointmentEntity,
+    hasAccess: Boolean,
+    isDone: Boolean,
+    onToggleDone: (Boolean) -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth().shadow(elevation = 2.dp, shape = RoundedCornerShape(20.dp)),
         shape = RoundedCornerShape(20.dp),
@@ -1646,11 +1675,12 @@ fun UpcomingAppointmentCard(appointment: AppointmentEntity) {
                 Icon(Icons.Default.Event, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
             }
             Spacer(modifier = Modifier.width(16.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(text = "Upcoming Appointment", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                 Text(text = "Dr. ${appointment.doctorName}", fontWeight = FontWeight.Bold)
                 Text(text = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(appointment.appointmentTime)), style = MaterialTheme.typography.bodySmall)
             }
+            UpcomingDoneControl(isDone = isDone, hasAccess = hasAccess, onToggleDone = onToggleDone)
         }
     }
 }
@@ -1658,9 +1688,10 @@ fun UpcomingAppointmentCard(appointment: AppointmentEntity) {
 @Composable
 fun KickCounterCard(count: Int, hasAccess: Boolean, onIncrement: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().shadow(elevation = 4.dp, shape = RoundedCornerShape(24.dp)),
+        modifier = Modifier.fillMaxWidth().shadow(elevation = 6.dp, shape = RoundedCornerShape(24.dp)),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
@@ -1835,23 +1866,44 @@ fun FamilyQuickView(members: List<FamilyMemberEntity>, hasAccess: Boolean) {
 @Composable
 fun DailyQuoteSection(quote: String) {
     Card(
-        modifier = Modifier.fillMaxWidth().shadow(elevation = 2.dp, shape = RoundedCornerShape(20.dp)),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.05f))
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(elevation = 8.dp, shape = RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(Icons.Default.FormatQuote, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = quote,
-                style = MaterialTheme.typography.bodyLarge,
-                fontStyle = FontStyle.Italic,
-                textAlign = TextAlign.Center,
-                lineHeight = 28.sp
+        Box(
+            modifier = Modifier.background(
+                Brush.linearGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f)
+                    )
+                )
             )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    Icons.Default.FormatQuote,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(32.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = quote,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White,
+                    fontStyle = FontStyle.Italic,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 28.sp
+                )
+            }
         }
     }
 }

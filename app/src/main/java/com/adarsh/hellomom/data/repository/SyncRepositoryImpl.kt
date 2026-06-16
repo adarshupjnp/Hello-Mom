@@ -4,6 +4,7 @@ import com.adarsh.hellomom.data.local.SyncStatus
 import com.adarsh.hellomom.data.local.dao.AppointmentDao
 import com.adarsh.hellomom.data.local.dao.BillingDao
 import com.adarsh.hellomom.data.local.dao.ContractionDao
+import com.adarsh.hellomom.data.local.dao.DailyScheduleStatusDao
 import com.adarsh.hellomom.data.local.dao.FamilyMemberDao
 import com.adarsh.hellomom.data.local.dao.JournalDao
 import com.adarsh.hellomom.data.local.dao.MealDao
@@ -16,6 +17,7 @@ import com.adarsh.hellomom.data.local.dao.WaterIntakeDao
 import com.adarsh.hellomom.data.local.entity.AppointmentEntity
 import com.adarsh.hellomom.data.local.entity.BillingEntity
 import com.adarsh.hellomom.data.local.entity.ContractionEntity
+import com.adarsh.hellomom.data.local.entity.DailyScheduleStatusEntity
 import com.adarsh.hellomom.data.local.entity.FamilyMemberEntity
 import com.adarsh.hellomom.data.local.entity.JournalEntity
 import com.adarsh.hellomom.data.local.entity.MealEntity
@@ -54,6 +56,7 @@ class SyncRepositoryImpl @Inject constructor(
     private val billingDao: BillingDao,
     private val contractionDao: ContractionDao,
     private val journalDao: JournalDao,
+    private val dailyScheduleStatusDao: DailyScheduleStatusDao,
     private val reminderManager: ReminderManager,
     private val appointmentReminderScheduler: AppointmentReminderScheduler
 ) : SyncRepository {
@@ -66,9 +69,12 @@ class SyncRepositoryImpl @Inject constructor(
     private var lastSuccessfulSyncAt = 0L
 
     override suspend fun syncIfStale(maxAgeMillis: Long): Result<Unit> {
+        // Family members get a much shorter freshness window so navigating any screen re-pulls the
+        // owner's latest data almost immediately; owners (the writers) keep the requested window.
+        val effectiveMaxAge = familyAwareStaleness(maxAgeMillis)
         val age = System.currentTimeMillis() - lastSuccessfulSyncAt
-        if (age < maxAgeMillis) {
-            SyncLogger.info("syncIfStale: cache is fresh (${age}ms old), skipping")
+        if (age < effectiveMaxAge) {
+            SyncLogger.info("syncIfStale: cache is fresh (${age}ms old, window=${effectiveMaxAge}ms), skipping")
             return Result.success(Unit)
         }
         if (syncMutex.isLocked) {
@@ -77,6 +83,19 @@ class SyncRepositoryImpl @Inject constructor(
         }
         return syncAll()
     }
+
+    /**
+     * Returns the freshness window to honour for the current user: family members use the shorter
+     * [SyncRepository.FAMILY_SYNC_STALENESS_MS] so they pull the owner's latest data on almost
+     * every navigation; owners keep the requested (default 60s) window. Falls back to the requested
+     * window on any error so a lookup failure never blocks a sync.
+     */
+    private suspend fun familyAwareStaleness(requested: Long): Long = runCatching {
+        val uid = firebaseAuth.currentUser?.uid ?: return@runCatching requested
+        val self = userDao.getUserByIdOnce(uid) ?: return@runCatching requested
+        val isOwner = com.adarsh.hellomom.core.RoleManager.isOwnerUser(self.fullName, self.email)
+        if (isOwner) requested else minOf(requested, SyncRepository.FAMILY_SYNC_STALENESS_MS)
+    }.getOrDefault(requested)
 
     override suspend fun syncAll(): Result<Unit> = withContext(Dispatchers.IO) {
         syncMutex.withLock {
@@ -99,7 +118,7 @@ class SyncRepositoryImpl @Inject constructor(
             ?: return@withContext Result.success(Unit)
             userDao.insertUser(self)
 
-            val isOwner = com.adarsh.hellomom.core.RoleManager.isOwnerName(self.fullName)
+            val isOwner = com.adarsh.hellomom.core.RoleManager.isOwnerUser(self.fullName, self.email)
             SyncLogger.info("syncAll user='${self.fullName}' isOwner=$isOwner startDate=${self.pregnancyStartDate} storedLink=${self.linkedPrimaryUserId}")
 
             if (isOwner) {
@@ -146,7 +165,7 @@ class SyncRepositoryImpl @Inject constructor(
     private suspend fun isValidOwner(userId: String): Boolean = runCatching {
         val doc = firestore.collection("users").document(userId).get().await()
             .toObject(UserEntity::class.java)
-        doc != null && com.adarsh.hellomom.core.RoleManager.isOwnerName(doc.fullName) && doc.pregnancyStartDate != null
+        doc != null && com.adarsh.hellomom.core.RoleManager.isOwnerUser(doc.fullName, doc.email) && doc.pregnancyStartDate != null
     }.getOrDefault(false)
 
     override suspend fun pullOwnerData(ownerUserId: String): Result<Unit> {
@@ -334,6 +353,17 @@ class SyncRepositoryImpl @Inject constructor(
                 journalDao.deleteEntriesNotIn(ownerUserId, list.map { it.entryId })
             }
 
+            // Daily schedule status (today's done/pending marks; family read-only).
+            runCatching {
+                firestore.collection("users").document(ownerUserId)
+                    .collection("daily_schedule_status").get().await()
+                    .toObjects(DailyScheduleStatusEntity::class.java)
+            }.getOrNull()?.let { list ->
+                SyncLogger.firebaseRead("PULL schedule status", "users/$ownerUserId/daily_schedule_status", "count=${list.size}")
+                list.forEach { dailyScheduleStatusDao.upsert(it.copy(syncStatus = SyncStatus.SYNCED)) }
+                dailyScheduleStatusDao.deleteStatusesNotIn(ownerUserId, list.map { it.id })
+            }
+
             SyncLogger.info("pullOwnerData DONE ownerId=$ownerUserId")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -419,6 +449,21 @@ class SyncRepositoryImpl @Inject constructor(
             }
         }.onFailure { SyncLogger.warn("push journal failed", it) }
 
+        // Pending daily schedule status marks
+        runCatching {
+            val pending = dailyScheduleStatusDao.getPendingSync()
+            if (pending.isNotEmpty()) SyncLogger.info("pushing ${pending.size} pending schedule status marks")
+            pending.forEach { status ->
+                firestore.collection("users").document(status.userId)
+                    .collection("daily_schedule_status").document(status.id)
+                    .set(status.copy(syncStatus = SyncStatus.SYNCED)).await()
+                SyncLogger.firebaseWrite("PUSH schedule status", "users/${status.userId}/daily_schedule_status/${status.id}", "done=${status.isDone}")
+                dailyScheduleStatusDao.upsert(
+                    status.copy(syncStatus = SyncStatus.SYNCED, lastSyncedAt = System.currentTimeMillis())
+                )
+            }
+        }.onFailure { SyncLogger.warn("push schedule status failed", it) }
+
         // Symptoms (no sync flag — mirror all of the owner's local logs).
         runCatching {
             val logs = symptomDao.getSymptomLogsOnce(uid)
@@ -434,7 +479,7 @@ class SyncRepositoryImpl @Inject constructor(
     /** Locate the pregnancy owner by the hardcoded name convention (adarsh / riya). */
     private suspend fun findOwnerId(): String? = runCatching {
         firestore.collection("users").get().await().documents.find { doc ->
-            com.adarsh.hellomom.core.RoleManager.isOwnerName(doc.getString("fullName"))
+            com.adarsh.hellomom.core.RoleManager.isOwnerUser(doc.getString("fullName"), doc.getString("email"))
         }?.id
     }.getOrNull()
 

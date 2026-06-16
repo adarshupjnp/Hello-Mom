@@ -21,7 +21,16 @@ data class LoginState(
     val password: String = "",
     val isLoading: Boolean = false,
     val error: String? = null
-) : UiState
+) : UiState {
+    /** True only when [email] is a well-formed email address. */
+    val isEmailValid: Boolean
+        get() = email.isNotBlank() &&
+            android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
+
+    /** Login is allowed only with a valid email and a non-blank password. */
+    val isLoginEnabled: Boolean
+        get() = isEmailValid && password.isNotBlank()
+}
 
 sealed class LoginEffect : UiEffect {
     object NavigateToHome : LoginEffect()

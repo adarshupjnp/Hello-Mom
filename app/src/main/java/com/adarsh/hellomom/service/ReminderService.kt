@@ -12,6 +12,7 @@ import android.speech.tts.TextToSpeech
 import androidx.core.app.NotificationCompat
 import com.adarsh.hellomom.MainActivity
 import com.adarsh.hellomom.R
+import com.adarsh.hellomom.core.utils.sanitizeForSpeech
 import com.adarsh.hellomom.data.local.PreferenceManager
 import com.adarsh.hellomom.notification.NotificationActionReceiver
 import java.util.*
@@ -72,7 +73,10 @@ class ReminderService : Service(), TextToSpeech.OnInitListener {
         if (!PreferenceManager(applicationContext).isVoiceEnabled) return
         if (tts != null && (title != null || message != null)) {
             if (requestAudioFocus()) {
-                val fullMessage = "Reminder. $title. $message"
+                // Strip emojis/icons from the title & message so TTS reads only the words
+                // (e.g. a "❤️" in a reminder isn't spoken as "dil"). The notification UI
+                // still shows the original text with its emojis.
+                val fullMessage = sanitizeForSpeech("Reminder. $title. $message")
                 tts?.speak(fullMessage, TextToSpeech.QUEUE_FLUSH, null, "reminder_tts")
             }
         }

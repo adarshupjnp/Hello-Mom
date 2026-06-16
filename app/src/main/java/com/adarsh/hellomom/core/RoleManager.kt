@@ -31,7 +31,7 @@ class RoleManager @Inject constructor(
     private val firestore: FirebaseFirestore
 ) {
     /** Reactive owner flag for the currently logged-in user. */
-    val isOwner: Flow<Boolean> = authRepository.getCurrentUser().map { isOwnerName(it?.fullName) }
+    val isOwner: Flow<Boolean> = authRepository.getCurrentUser().map { isOwnerUser(it?.fullName, it?.email) }
 
     /**
      * Resolve the caller's role and the userId whose pregnancy data should be shown:
@@ -48,7 +48,7 @@ class RoleManager @Inject constructor(
             return@withContext AccessInfo()
         }
 
-        if (isOwnerName(user.fullName)) {
+        if (isOwnerUser(user.fullName, user.email)) {
             SyncLogger.resolve(
                 "OWNER '${user.fullName}' (id=${user.userId}) → activeUserId=${user.userId}, " +
                     "pregnancyStartDate=${user.pregnancyStartDate}"
@@ -64,7 +64,7 @@ class RoleManager @Inject constructor(
         // --- Family member: resolve & validate the owner whose data we display. ---
         var ownerId = user.linkedPrimaryUserId
         var ownerDoc = if (!ownerId.isNullOrEmpty()) fetchOwnerDoc(ownerId) else null
-        val linkValid = ownerDoc != null && isOwnerName(ownerDoc.fullName) && ownerDoc.pregnancyStartDate != null
+        val linkValid = ownerDoc != null && isOwnerUser(ownerDoc.fullName, ownerDoc.email) && ownerDoc.pregnancyStartDate != null
 
         SyncLogger.resolve(
             "FAMILY '${user.fullName}' (id=${user.userId}) storedLink=$ownerId " +
@@ -162,16 +162,30 @@ class RoleManager @Inject constructor(
      */
     private suspend fun findOwner(): UserEntity? = runCatching {
         val owners = firestore.collection("users").get().await().documents
-            .filter { isOwnerName(it.getString("fullName")) }
+            .filter { isOwnerUser(it.getString("fullName"), it.getString("email")) }
             .mapNotNull { it.toObject(UserEntity::class.java) }
         SyncLogger.firebaseRead("SCAN owners", "users", "found=${owners.size} names=${owners.map { it.fullName }}")
         owners.firstOrNull { it.pregnancyStartDate != null } ?: owners.firstOrNull()
     }.getOrNull()
 
     companion object {
-        /** Owner accounts are identified by the hardcoded name convention. */
-        fun isOwnerName(fullName: String?): Boolean {
-            val n = (fullName ?: "").lowercase()
+        /**
+         * Owner accounts are identified by the hardcoded keyword convention. Kept for the call
+         * sites that only have a name; prefer [isOwnerUser] when an email is available so the
+         * owner is still detected when the display name doesn't carry the keyword.
+         */
+        fun isOwnerName(fullName: String?): Boolean = matchesOwner(fullName)
+
+        /**
+         * Owner check that considers BOTH the display name and the account email. This is the
+         * robust variant: a profile whose `fullName` is blank or a nickname (so the name-only
+         * check fails) is still recognised as the owner via its email (e.g. adarsh.dwivedi@…).
+         */
+        fun isOwnerUser(fullName: String?, email: String?): Boolean =
+            matchesOwner(fullName) || matchesOwner(email)
+
+        private fun matchesOwner(value: String?): Boolean {
+            val n = (value ?: "").lowercase()
             return n.contains("adarsh") || n.contains("riya")
         }
     }

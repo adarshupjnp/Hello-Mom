@@ -15,6 +15,7 @@ import com.adarsh.hellomom.data.local.dao.WaterIntakeDao
 import com.adarsh.hellomom.data.local.dao.ReminderDao
 import com.adarsh.hellomom.data.local.dao.ContractionDao
 import com.adarsh.hellomom.data.local.dao.JournalDao
+import com.adarsh.hellomom.data.local.dao.DailyScheduleStatusDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -73,4 +74,7 @@ object DatabaseModule {
 
     @Provides
     fun provideJournalDao(db: AppDatabase): JournalDao = db.journalDao()
+
+    @Provides
+    fun provideDailyScheduleStatusDao(db: AppDatabase): DailyScheduleStatusDao = db.dailyScheduleStatusDao()
 }

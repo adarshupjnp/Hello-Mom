@@ -9,7 +9,7 @@ import com.adarsh.hellomom.data.local.entity.WaterIntakeEntity
 sealed class FoodIntent : UiIntent {
     object LoadData : FoodIntent()
     data class OnMealToggle(val meal: MealEntity) : FoodIntent()
-    data class OnAddMeal(val type: String, val items: String, val time: String) : FoodIntent()
+    data class OnAddMeal(val type: String, val items: String, val time: String, val days: String) : FoodIntent()
     data class OnUpdateMeal(val meal: MealEntity) : FoodIntent()
     data class OnDeleteMeal(val meal: MealEntity) : FoodIntent()
     object OnAddGlassWater : FoodIntent()

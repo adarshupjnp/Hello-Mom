@@ -33,5 +33,12 @@ interface SyncRepository {
     companion object {
         /** Screens consider the cache fresh for this long before triggering another sync. */
         const val DEFAULT_SYNC_STALENESS_MS: Long = 60_000
+
+        /**
+         * Shorter freshness window applied to read-only family members: they are not the writers,
+         * so on every screen navigation we re-pull the owner's data almost immediately, ensuring
+         * they always see the latest. (Owners keep the longer [DEFAULT_SYNC_STALENESS_MS].)
+         */
+        const val FAMILY_SYNC_STALENESS_MS: Long = 5_000
     }
 }

@@ -167,6 +167,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(48.dp))
 
+            val showEmailError = state.email.isNotBlank() && !state.isEmailValid
             OutlinedTextField(
                 value = state.email,
                 onValueChange = { viewModel.sendIntent(LoginIntent.OnEmailChanged(it)) },
@@ -174,6 +175,10 @@ fun LoginScreen(
                 modifier = Modifier.fillMaxWidth(),
                 leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                isError = showEmailError,
+                supportingText = if (showEmailError) {
+                    { Text("Enter a valid email address") }
+                } else null,
                 singleLine = true
             )
 
@@ -212,6 +217,7 @@ fun LoginScreen(
             LoadingButton(
                 text = "Login",
                 isLoading = state.isLoading,
+                enabled = state.isLoginEnabled,
                 onClick = { viewModel.sendIntent(LoginIntent.OnLoginClicked) }
             )
 

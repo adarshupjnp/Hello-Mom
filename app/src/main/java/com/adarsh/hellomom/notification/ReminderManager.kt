@@ -129,4 +129,15 @@ class ReminderManager @Inject constructor(
             alarmManager.cancel(pendingIntent)
         }
     }
+
+    /** Cancel the 1-hour auto-snooze safety check armed in [scheduleSnoozeCheck] (request code id + 100000). */
+    fun cancelSnoozeCheck(id: Int) {
+        val intent = Intent(context, ReminderReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            context, id + 100000, intent, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+        if (pendingIntent != null) {
+            alarmManager.cancel(pendingIntent)
+        }
+    }
 }

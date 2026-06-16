@@ -26,16 +26,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.MonitorWeight
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -71,6 +68,8 @@ import com.adarsh.hellomom.navigation.Screen
 import com.adarsh.hellomom.presentation.components.AppBottomNavBar
 import com.adarsh.hellomom.presentation.components.AppTab
 import com.adarsh.hellomom.presentation.components.NAV_SELECTED_TAB_KEY
+import com.adarsh.hellomom.presentation.components.ShimmerPlaceholder
+import com.adarsh.hellomom.presentation.dashboard.HearYourBabyCard
 import com.adarsh.hellomom.ui.theme.Accent
 import com.adarsh.hellomom.ui.theme.Primary
 import com.adarsh.hellomom.ui.theme.PrimaryDark
@@ -102,11 +101,6 @@ fun BabyProgressScreen(
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = Color.Transparent
@@ -141,10 +135,7 @@ fun BabyProgressScreen(
                 .padding(padding)
         ) {
             if (state.isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.primary
-                )
+                BabyProgressShimmer()
             } else {
                 Column(
                     modifier = Modifier
@@ -176,6 +167,14 @@ fun BabyProgressScreen(
                     Spacer(Modifier.height(20.dp))
 
                     DueDateCard(dueDate = state.dueDate, daysToGo = state.daysToGo)
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // Interactive "Hear Your Baby" card (moved here from the Home tab).
+                    HearYourBabyCard(
+                        week = state.week,
+                        weight = state.weekData.babyWeight
+                    )
 
                     Spacer(Modifier.height(16.dp))
 
@@ -227,6 +226,83 @@ fun BabyProgressScreen(
                     Spacer(Modifier.height(24.dp))
                 }
             }
+        }
+    }
+}
+
+/**
+ * Skeleton shown while [BabyProgressViewModel] resolves the pregnancy data. Mirrors the real
+ * layout (progress ring, trimester tracker, due-date hero, stat tiles and info cards) so the
+ * screen settles in place instead of jumping from a spinner to a full page.
+ */
+@Composable
+private fun BabyProgressShimmer() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(Modifier.height(8.dp))
+
+        // Circular placeholder standing in for the animated progress ring.
+        Box(modifier = Modifier.size(300.dp)) {
+            ShimmerPlaceholder(height = 300.dp, shape = RoundedCornerShape(150.dp))
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // "x% of the journey complete" line.
+        ShimmerPlaceholder(
+            modifier = Modifier.width(220.dp),
+            height = 16.dp,
+            shape = RoundedCornerShape(8.dp)
+        )
+
+        Spacer(Modifier.height(24.dp))
+
+        // Trimester tracker (three segments).
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            repeat(3) {
+                ShimmerPlaceholder(
+                    modifier = Modifier.weight(1f),
+                    height = 8.dp,
+                    shape = RoundedCornerShape(4.dp)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        // Due-date hero card.
+        ShimmerPlaceholder(height = 82.dp, shape = RoundedCornerShape(20.dp))
+
+        Spacer(Modifier.height(16.dp))
+
+        // Size / weight / length stat tiles.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            repeat(3) {
+                ShimmerPlaceholder(
+                    modifier = Modifier.weight(1f),
+                    height = 96.dp,
+                    shape = RoundedCornerShape(16.dp)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Milestone / development / body-changes info cards.
+        repeat(3) {
+            ShimmerPlaceholder(height = 96.dp, shape = RoundedCornerShape(16.dp))
+            Spacer(Modifier.height(12.dp))
         }
     }
 }

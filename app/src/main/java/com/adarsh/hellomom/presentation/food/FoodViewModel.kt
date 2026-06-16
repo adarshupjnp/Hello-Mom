@@ -36,7 +36,7 @@ class FoodViewModel @Inject constructor(
         when (intent) {
             FoodIntent.LoadData -> loadData()
             is FoodIntent.OnMealToggle -> toggleMeal(intent.meal)
-            is FoodIntent.OnAddMeal -> addMeal(intent.type, intent.items, intent.time)
+            is FoodIntent.OnAddMeal -> addMeal(intent.type, intent.items, intent.time, intent.days)
             is FoodIntent.OnUpdateMeal -> updateMeal(intent.meal)
             is FoodIntent.OnDeleteMeal -> deleteMeal(intent.meal)
             FoodIntent.OnAddGlassWater -> updateWater(1)
@@ -134,7 +134,7 @@ class FoodViewModel @Inject constructor(
         }
     }
 
-    private fun addMeal(type: String, items: String, time: String) {
+    private fun addMeal(type: String, items: String, time: String, days: String) {
         viewModelScope.launch {
             val access = roleManager.resolveAccess()
             if (!access.isOwner) return@launch
@@ -144,6 +144,7 @@ class FoodViewModel @Inject constructor(
                 mealType = type,
                 foodItems = items,
                 timing = time,
+                daysOfWeek = days,
                 isTaken = false
             )
             foodRepository.insertMeal(meal)

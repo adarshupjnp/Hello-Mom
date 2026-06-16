@@ -2,6 +2,7 @@ package com.adarsh.hellomom.presentation.food
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,6 +13,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -79,8 +82,8 @@ fun FoodScreen(
     if (showAddMealDialog) {
         AddMealDialog(
             onDismiss = { showAddMealDialog = false },
-            onSave = { type, items, time ->
-                viewModel.sendIntent(FoodIntent.OnAddMeal(type, items, time))
+            onSave = { type, items, time, days ->
+                viewModel.sendIntent(FoodIntent.OnAddMeal(type, items, time, days))
                 showAddMealDialog = false
             }
         )
@@ -335,36 +338,64 @@ fun RecommendedFoodSection(week: Int) {
     val (subtitle, categories) = remember(week) { mealPlanForWeek(week) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             categories.forEach { category ->
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = category.emoji, style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = category.name,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    category.items.forEach { item ->
-                        Row(
-                            modifier = Modifier.padding(start = 4.dp),
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Text(text = "•  ", style = MaterialTheme.typography.bodyMedium)
-                            Text(text = item, style = MaterialTheme.typography.bodyMedium)
-                        }
+                CollapsibleFoodCategory(category)
+            }
+        }
+    }
+}
+
+/**
+ * One collapsible meal category: tapping the header toggles ITS OWN food list open/closed,
+ * independently of the other categories (multiple can be expanded at once). Collapsed by default.
+ */
+@Composable
+private fun CollapsibleFoodCategory(category: MealCategory) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = category.emoji, style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = category.name,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (expanded) "Collapse ${category.name}" else "Expand ${category.name}",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+        AnimatedVisibility(visible = expanded) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                category.items.forEach { item ->
+                    Row(
+                        modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(text = "•  ", style = MaterialTheme.typography.bodyMedium)
+                        Text(text = item, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
         }
+        HorizontalDivider()
     }
 }
 
@@ -403,6 +434,14 @@ fun MealItem(
                 Text(text = meal.mealType, fontWeight = FontWeight.Bold)
                 Text(text = meal.foodItems, style = MaterialTheme.typography.bodyMedium)
                 Text(text = meal.timing, style = MaterialTheme.typography.bodySmall)
+                if (meal.daysOfWeek.isNotBlank()) {
+                    val days = meal.daysOfWeek.split(",")
+                    Text(
+                        text = if (days.size == 7) "Every day" else days.joinToString(", "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
             // Edit / delete controls are hidden for read-only family members.
             if (canEdit) {
@@ -464,15 +503,18 @@ fun EditMealDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddMealDialog(
     onDismiss: () -> Unit,
-    onSave: (String, String, String) -> Unit
+    onSave: (String, String, String, String) -> Unit
 ) {
     var type by remember { mutableStateOf("Breakfast") }
     var items by remember { mutableStateOf("") }
-    
+    // Weekdays the meal is planned for, in canonical Mon→Sun order (mirrors Add Medicine).
+    val weekDays = remember { listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun") }
+    var selectedDays by remember { mutableStateOf(emptySet<String>()) }
+
     val currentTime = Calendar.getInstance()
     val timePickerState = rememberTimePickerState(
         initialHour = currentTime.get(Calendar.HOUR_OF_DAY),
@@ -545,10 +587,60 @@ fun AddMealDialog(
                         disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 )
+
+                // Weekday selection — at least one day is required before saving.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "Days of the week", style = MaterialTheme.typography.labelLarge)
+                    val allSelected = selectedDays.containsAll(weekDays)
+                    TextButton(onClick = {
+                        selectedDays = if (allSelected) emptySet() else weekDays.toSet()
+                    }) {
+                        Text(if (allSelected) "Clear all" else "All days")
+                    }
+                }
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    weekDays.forEach { day ->
+                        FilterChip(
+                            selected = day in selectedDays,
+                            onClick = {
+                                selectedDays = selectedDays.toMutableSet().apply {
+                                    if (!add(day)) remove(day)
+                                }
+                            },
+                            label = { Text(day) }
+                        )
+                    }
+                }
+                Text(
+                    text = if (selectedDays.isEmpty())
+                        "Select at least one day"
+                    else
+                        "${selectedDays.size} day(s) selected",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (selectedDays.isEmpty())
+                        MaterialTheme.colorScheme.error
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(type, items, selectedTime) }) { Text("Save") }
+            Button(
+                onClick = {
+                    // Persist days in canonical Mon→Sun order, matching Add Medicine.
+                    val days = weekDays.filter { it in selectedDays }.joinToString(",")
+                    onSave(type, items, selectedTime, days)
+                },
+                enabled = items.isNotBlank() && selectedDays.isNotEmpty()
+            ) { Text("Save") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

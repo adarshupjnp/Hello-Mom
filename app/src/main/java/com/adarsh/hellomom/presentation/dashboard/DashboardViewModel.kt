@@ -21,8 +21,12 @@ class DashboardViewModel @Inject constructor(
     private val dashboardRepository: DashboardRepository,
     private val reminderRepository: ReminderRepository,
     private val syncRepository: SyncRepository,
+    private val scheduleRepository: ScheduleRepository,
     private val roleManager: RoleManager
 ) : BaseViewModel<DashboardIntent, DashboardState, DashboardEffect>() {
+
+    private val todayDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+        .format(java.util.Date())
 
     override fun createInitialState(): DashboardState = DashboardState()
 
@@ -39,6 +43,7 @@ class DashboardViewModel @Inject constructor(
             is DashboardIntent.UpdateSleep -> updateSleep(intent.hours)
             is DashboardIntent.UpdateWeight -> updateWeight(intent.kg)
             is DashboardIntent.UpdateSteps -> updateSteps(intent.steps)
+            is DashboardIntent.ToggleUpcomingDone -> toggleUpcomingDone(intent.type, intent.refId, intent.isDone)
             DashboardIntent.Refresh -> syncData()
         }
     }
@@ -100,7 +105,8 @@ class DashboardViewModel @Inject constructor(
                 dashboardRepository.getMedicinesToday(targetUserId),
                 dashboardRepository.getRecentSymptoms(targetUserId),
                 dashboardRepository.getConnectedFamilyMembers(targetUserId),
-                userRepository.getUser(targetUserId)
+                userRepository.getUser(targetUserId),
+                scheduleRepository.getDailyStatuses(targetUserId, todayDate)
             ) { arrayOfFlows ->
                 val health = arrayOfFlows[0] as MotherHealthData
                 val kicks = arrayOfFlows[1] as Int
@@ -110,6 +116,13 @@ class DashboardViewModel @Inject constructor(
                 var family = arrayOfFlows[5] as List<FamilyMemberEntity>
                 // Prefer the freshest owner profile from Room, falling back to the resolved one.
                 val ownerUser = (arrayOfFlows[6] as UserEntity?) ?: access.owner
+                @Suppress("UNCHECKED_CAST")
+                val dailyStatuses = arrayOfFlows[7] as List<DailyScheduleStatusEntity>
+                // refIds the owner has ticked done today (drives the Upcoming green check + family view).
+                val doneToday = dailyStatuses
+                    .filter { it.isDone && !it.isDeleted }
+                    .map { it.refId }
+                    .toSet()
 
                 val startDate = ownerUser?.pregnancyStartDate ?: access.owner?.pregnancyStartDate
                 val week = PregnancyProgress.week(startDate)
@@ -139,6 +152,14 @@ class DashboardViewModel @Inject constructor(
                 val weekData = PregnancyDataEngine.getWeekData(week)
                 val isFamily = targetUserId != user.userId
 
+                // "Upcoming" filtering rules:
+                //  • Appointments — by calendar DAY: an appointment dated today stays visible all
+                //    day and only drops off once the date rolls over to tomorrow.
+                //  • Medicines — by exact dose TIME with a 15-minute grace buffer: an 08:00 AM dose
+                //    stays visible until 08:15 AM, then hides.
+                val now = System.currentTimeMillis()
+                val startOfToday = startOfDayMillis()
+
                 DashboardState(
                     user = user,
                     ownerName = if (isFamily) (ownerUser?.fullName ?: "") else "",
@@ -150,10 +171,13 @@ class DashboardViewModel @Inject constructor(
                     weekData = weekData,
                     healthData = health,
                     kickCount = kicks,
-                    appointments = appointments.filter { it.appointmentTime > System.currentTimeMillis() }.sortedBy { it.appointmentTime },
-                    medicines = meds,
+                    appointments = appointments.filter { it.appointmentTime >= startOfToday }.sortedBy { it.appointmentTime },
+                    medicines = meds
+                        .filter { isMedicineUpcomingToday(it, now, startOfToday) }
+                        .sortedBy { nextDoseMillisToday(it, now, startOfToday) },
                     symptoms = symptoms,
                     familyMembers = family,
+                    doneToday = doneToday,
                     isLoading = false,
                     quote = getDailyQuote()
                 )
@@ -240,6 +264,77 @@ class DashboardViewModel @Inject constructor(
             dashboardRepository.updateMotherHealthData(userId, currentHealth.copy(steps = steps))
         }
     }
+
+    /**
+     * Owner marks an Upcoming card (appointment / medicine) done for today. Writes a
+     * daily_schedule_status row (Room first, then best-effort Firestore), so the green tick
+     * reflects on the owner's device AND syncs to linked family members. Read-only family members
+     * are blocked here (belt-and-suspenders alongside the UI hiding the checkbox).
+     */
+    private fun toggleUpcomingDone(type: String, refId: String, isDone: Boolean) {
+        viewModelScope.launch {
+            val userId = writableUserId() ?: return@launch
+            scheduleRepository.setStatus(userId, todayDate, type, refId, isDone)
+        }
+    }
+
+    /** Epoch millis for 00:00 of the current device-local day. */
+    private fun startOfDayMillis(): Long = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, 0)
+        set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    /** Grace window after a medicine's dose time before it's treated as "passed". */
+    private val doseBufferMs = 15L * 60 * 1000
+
+    /**
+     * Parse a medicine's dose time(s) — stored as "hh:mm a" (e.g. "08:00 AM"), with tolerance for
+     * legacy comma-separated and 24-hour values — into today's epoch millis.
+     */
+    private fun parseDoseTimesToday(timing: String, startOfToday: Long): List<Long> {
+        val formats = listOf(
+            java.text.SimpleDateFormat("hh:mm a", java.util.Locale.ENGLISH),
+            java.text.SimpleDateFormat("HH:mm", java.util.Locale.ENGLISH)
+        )
+        return timing.split(",").mapNotNull { raw ->
+            val token = raw.trim()
+            if (token.isEmpty()) return@mapNotNull null
+            for (fmt in formats) {
+                val parsed = runCatching { fmt.parse(token) }.getOrNull() ?: continue
+                val c = java.util.Calendar.getInstance().apply { time = parsed }
+                val minutes = c.get(java.util.Calendar.HOUR_OF_DAY) * 60 + c.get(java.util.Calendar.MINUTE)
+                return@mapNotNull startOfToday + minutes * 60_000L
+            }
+            null
+        }
+    }
+
+    /**
+     * A medicine belongs in "Upcoming" when its course is active, it's scheduled for today's
+     * weekday, and it still has a dose whose time (+15 min buffer) hasn't passed.
+     */
+    private fun isMedicineUpcomingToday(med: MedicineEntity, now: Long, startOfToday: Long): Boolean {
+        if (med.isCompleted) return false
+        // Course already finished before today.
+        if (med.endDate != 0L && med.endDate < startOfToday) return false
+        // Respect the scheduled weekdays (blank = every day).
+        if (med.daysOfWeek.isNotBlank()) {
+            val today = java.text.SimpleDateFormat("EEE", java.util.Locale.ENGLISH).format(java.util.Date(now))
+            if (med.daysOfWeek.split(",").map { it.trim() }.none { it.equals(today, ignoreCase = true) }) return false
+        }
+        val doses = parseDoseTimesToday(med.timing, startOfToday)
+        // No parseable time → keep visible for the whole scheduled day.
+        if (doses.isEmpty()) return true
+        return doses.any { now <= it + doseBufferMs }
+    }
+
+    /** Millis of the soonest not-yet-passed dose today, used to order the Upcoming medicines. */
+    private fun nextDoseMillisToday(med: MedicineEntity, now: Long, startOfToday: Long): Long =
+        parseDoseTimesToday(med.timing, startOfToday)
+            .filter { now <= it + doseBufferMs }
+            .minOrNull() ?: Long.MAX_VALUE
 
     /** Compute and apply the pregnancy week/day/trimester from a start date (used for the initial seed). */
     private fun applyWeek(startDate: Long?, source: String) {
