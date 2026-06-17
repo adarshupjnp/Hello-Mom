@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "885566453620",
+    "project_id": "hello-mom-6e500",
+    "storage_bucket": "hello-mom-6e500.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:885566453620:android:c6cfe33100563525185e21",
+        "android_client_info": {
+          "package_name": "com.adarsh.hellomom"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "885566453620-bofeo4l1lkp0om69jvkaeujng11uhkgr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.adarsh.hellomom",
+            "certificate_hash": "8c797cea35d5337223193f96b585ed93ab562e75"
+          }
+        },
+        {
+          "client_id": "885566453620-ektgil92t0qskvd8s48eeqvogloounq0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCQrV1PYRRHqY2t9uNby_vEM5cbK0iD6ak"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "885566453620-ektgil92t0qskvd8s48eeqvogloounq0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
