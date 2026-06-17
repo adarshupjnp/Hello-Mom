@@ -37,6 +37,9 @@ interface ReminderDao {
     @Query("SELECT * FROM reminders WHERE userId = :userId AND title = :title AND date = :date AND time = :time LIMIT 1")
     suspend fun getExistingReminder(userId: String, title: String, date: String, time: Long): ReminderEntity?
 
+    @Query("SELECT * FROM reminders WHERE time < :expiryTime")
+    suspend fun getRemindersOlderThan(expiryTime: Long): List<ReminderEntity>
+
     @Query("DELETE FROM reminders WHERE time < :expiryTime")
     suspend fun deleteOldReminders(expiryTime: Long)
 

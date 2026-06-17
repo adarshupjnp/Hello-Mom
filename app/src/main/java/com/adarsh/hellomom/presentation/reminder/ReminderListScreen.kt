@@ -128,7 +128,9 @@ fun ReminderListScreen(
             Spacer(modifier = Modifier.height(8.dp))
             DateFilterRow(
                 selectedDate = selectedDate,
-                onDateSelected = { viewModel.setDateFilter(it) }
+                onDateSelected = { viewModel.setDateFilter(it) },
+                // Reminders are retained for 7 days, so the custom picker is bounded to that window.
+                maxPastDays = 7
             )
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -152,8 +154,13 @@ fun ReminderListScreen(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                // Show Pending first
-                items(familyReminders.filter { it.status == ReminderStatus.PENDING || it.status == ReminderStatus.SNOOZED }) { reminder ->
+                // Show the whole day as a real timeline — morning to night — in time order,
+                // regardless of status. A reminder keeps its slot and only its status badge
+                // changes when it's marked Done (from the notification popup or here), so the
+                // user is never confused by cards jumping around. Applies equally to predefined
+                // (auto) and manually added reminders since both share this single list.
+                // (familyReminders is already time-sorted by the ViewModel.)
+                items(familyReminders, key = { it.id }) { reminder ->
                     ReminderCard(
                         reminder = reminder,
                         isOwner = isOwner,
@@ -164,18 +171,6 @@ fun ReminderListScreen(
                             selectedReminderForTime = reminder
                             showTimePicker = true
                         }
-                    )
-                }
-                
-                // Show Completed and Expired at bottom
-                items(familyReminders.filter { it.status == ReminderStatus.COMPLETED || it.status == ReminderStatus.EXPIRED }) { reminder ->
-                    ReminderCard(
-                        reminder = reminder,
-                        isOwner = isOwner,
-                        onDone = { },
-                        onSnooze = { },
-                        onDelete = { viewModel.deleteReminder(reminder) },
-                        onEditTime = { }
                     )
                 }
                 }

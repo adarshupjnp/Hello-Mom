@@ -144,6 +144,11 @@ class ReminderService : Service(), TextToSpeech.OnInitListener {
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 tts?.language = Locale.ENGLISH
             }
+            // Make the reminder sound like a young person (~10-15 yrs) reading naturally,
+            // not a flat, low adult/operator voice. A higher pitch lifts the perceived age,
+            // while a near-normal rate keeps it clear and human rather than robotic.
+            tts?.setPitch(VOICE_PITCH)
+            tts?.setSpeechRate(VOICE_SPEECH_RATE)
             isTtsReady = true
             speakMessage()
         }
@@ -170,4 +175,12 @@ class ReminderService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    companion object {
+        // Voice tuning for the spoken reminder. Default TTS pitch/rate is 1.0 and sounds
+        // like a low, flat adult voice. Raising the pitch makes it read like a 10-15 year
+        // old; keeping the rate close to normal keeps every word clear and natural-sounding.
+        private const val VOICE_PITCH = 1.35f
+        private const val VOICE_SPEECH_RATE = 1.0f
+    }
 }

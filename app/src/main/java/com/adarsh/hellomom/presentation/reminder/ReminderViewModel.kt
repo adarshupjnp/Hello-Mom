@@ -46,12 +46,21 @@ class ReminderViewModel @Inject constructor(
 
     val displayedReminders: StateFlow<List<ReminderEntity>> =
         combine(_familyReminders, _selectedDate) { list, date ->
-            if (date == null) {
-                list
+            val filtered = if (date == null) {
+                list // "All"
             } else {
-                val dayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(date))
-                list.filter { it.date == dayStr }
+                // Match on the reminder's actual fire time falling inside the selected calendar
+                // day [startOfDay, startOfDay + 24h). This is more reliable than comparing the
+                // stored `date` string (which can drift when a reminder is snoozed to another day),
+                // so Today / Yesterday / Custom filters always reflect when the reminder really fires.
+                val dayStart = startOfDay(date)
+                val dayEnd = dayStart + DAY_MILLIS
+                list.filter { it.time in dayStart until dayEnd }
             }
+            // Always present the day as a real morning -> night timeline (earliest time first),
+            // so the UI can render a single chronological list and reminders never jump around
+            // when their status changes.
+            filtered.sortedBy { it.time }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun setDateFilter(date: Long?) {
@@ -96,8 +105,13 @@ class ReminderViewModel @Inject constructor(
 
     private fun cleanupOldReminders() {
         viewModelScope.launch {
-            val twoDaysAgo = System.currentTimeMillis() - (2 * 24 * 60 * 60 * 1000)
-            reminderRepository.deleteOldReminders(twoDaysAgo)
+            // Retain only the last 7 days (today + the previous 6). Anything older than the start
+            // of that window is purged so neither Room nor Firestore grows unbounded.
+            // The owner owns the data, so only the owner deletes from Firestore; family devices
+            // then drop the same rows on their next pull-reconcile. Family members do a harmless
+            // local-only purge (re-synced if still present remotely).
+            val cutoff = startOfDay(System.currentTimeMillis()) - (RETENTION_DAYS - 1) * DAY_MILLIS
+            reminderRepository.deleteOldReminders(cutoff, deleteRemote = isOwner.value)
         }
     }
 
@@ -125,30 +139,68 @@ class ReminderViewModel @Inject constructor(
         }
     }
 
+    // userId the live reminders listener is currently bound to, so we only re-attach when it changes.
+    private var familyRemindersUserId: String? = null
+
     private fun observeFamilyReminders() {
         viewModelScope.launch {
-            // Resolve whose reminders to watch: owners watch their own, family members watch the
-            // linked owner's. Filtering server-side avoids downloading every user's reminders.
-            val targetUserId = runCatching { roleManager.resolveAccess().activeUserId }
-                .getOrNull()?.takeIf { it.isNotEmpty() }
-            if (targetUserId == null) {
-                SyncLogger.warn("observeFamilyReminders: no resolvable user, listener not attached")
-                return@launch
-            }
-            familyRemindersListener?.remove()
-            familyRemindersListener = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                .collection("reminders")
-                .whereEqualTo("userId", targetUserId)
-                .addSnapshotListener { snapshot, e ->
-                    if (e != null) {
-                        SyncLogger.warn("reminders listener error", e)
-                        return@addSnapshotListener
-                    }
-                    // toObjects can throw on malformed documents — never crash the app for that.
-                    val list = runCatching { snapshot?.toObjects(ReminderEntity::class.java) }
-                        .getOrNull() ?: return@addSnapshotListener
-                    _familyReminders.value = list.sortedBy { r -> r.time }
+            // Re-resolve whose reminders to watch whenever the logged-in user (or their owner link)
+            // changes. A family member's linkedPrimaryUserId can be empty right after login and only
+            // heal once Firestore is reachable; collecting the user flow means we then re-attach the
+            // listener to the correct owner instead of being stuck watching the member's own id.
+            authRepository.getCurrentUser().collectLatest {
+                // Owners watch their own reminders; family members watch the linked owner's.
+                // Filtering server-side avoids downloading every user's reminders.
+                val targetUserId = runCatching { roleManager.resolveAccess().activeUserId }
+                    .getOrNull()?.takeIf { it.isNotEmpty() }
+                if (targetUserId == null) {
+                    SyncLogger.warn("observeFamilyReminders: no resolvable user, listener not attached")
+                    return@collectLatest
                 }
+                if (targetUserId == familyRemindersUserId) return@collectLatest // already listening
+                familyRemindersUserId = targetUserId
+                attachFamilyRemindersListener(targetUserId)
+            }
+        }
+    }
+
+    private fun attachFamilyRemindersListener(targetUserId: String) {
+        familyRemindersListener?.remove()
+        familyRemindersListener = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            .collection("reminders")
+            .whereEqualTo("userId", targetUserId)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    SyncLogger.warn("reminders listener error", e)
+                    return@addSnapshotListener
+                }
+                // toObjects can throw on malformed documents — never crash the app for that.
+                val list = runCatching { snapshot?.toObjects(ReminderEntity::class.java) }
+                    .getOrNull() ?: return@addSnapshotListener
+                _familyReminders.value = list.sortedBy { r -> r.time }
+                // Arm/cancel local alarms straight from the live stream so notifications fire on THIS
+                // device too — family members (and the owner's other devices) no longer depend on a
+                // throttled background pull to schedule them, which is why reminders sometimes showed
+                // in the list but never notified.
+                syncReminderAlarms(list)
+            }
+    }
+
+    /**
+     * Keep this device's local alarms in step with the latest reminder stream: schedule future
+     * pending/snoozed reminders (scheduling is idempotent — keyed by reminder id) and cancel any
+     * alarm for a reminder that's now completed or expired.
+     */
+    private fun syncReminderAlarms(list: List<ReminderEntity>) {
+        val now = System.currentTimeMillis()
+        list.forEach { reminder ->
+            when {
+                (reminder.status == ReminderStatus.PENDING || reminder.status == ReminderStatus.SNOOZED) &&
+                    reminder.time > now ->
+                    runCatching { reminderManager.scheduleReminder(reminder) }
+                reminder.status == ReminderStatus.COMPLETED || reminder.status == ReminderStatus.EXPIRED ->
+                    runCatching { reminderManager.cancelReminder(reminder.id) }
+            }
         }
     }
 
@@ -284,6 +336,22 @@ class ReminderViewModel @Inject constructor(
             reminderRepository.deleteReminder(reminder)
             reminderManager.cancelReminder(reminder.id)
         }
+    }
+
+    /** Midnight (local) of the day containing [millis]. */
+    private fun startOfDay(millis: Long): Long =
+        Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+
+    companion object {
+        private const val DAY_MILLIS = 24L * 60 * 60 * 1000
+        /** Reminders are kept for the last 7 days (today + the previous 6) and then purged. */
+        private const val RETENTION_DAYS = 7
     }
 }
 

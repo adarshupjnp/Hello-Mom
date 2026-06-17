@@ -31,6 +31,7 @@ import com.adarsh.hellomom.data.local.entity.MealEntity
 import com.adarsh.hellomom.data.local.entity.WaterIntakeEntity
 import com.adarsh.hellomom.presentation.components.AppFooter
 import com.adarsh.hellomom.presentation.components.DateFilterRow
+import com.adarsh.hellomom.presentation.components.ListShimmer
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -143,6 +144,16 @@ fun FoodScreen(
             ) 
         }
     ) { paddingValues ->
+        // Family members pull the owner's meals/water over the network, so show a shimmer until the
+        // first data emission lands instead of flashing an empty screen.
+        if (state.isLoading) {
+            ListShimmer(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            )
+            return@Scaffold
+        }
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()

@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.adarsh.hellomom.data.local.entity.SymptomLogEntity
+import com.adarsh.hellomom.presentation.components.ListShimmer
 import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,7 +69,15 @@ fun SymptomScreen(
             }
         }
     ) { paddingValues ->
-        if (state.logs.isEmpty()) {
+        if (state.isLoading && !showAddDialog) {
+            // Family members fetch the owner's symptom logs over the network — shimmer while loading
+            // (skipped while the add dialog is open, which reuses isLoading for the save action).
+            ListShimmer(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            )
+        } else if (state.logs.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("No symptoms logged yet.")
             }

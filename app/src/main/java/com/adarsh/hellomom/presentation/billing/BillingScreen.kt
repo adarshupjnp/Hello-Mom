@@ -26,6 +26,7 @@ import com.adarsh.hellomom.core.utils.PdfExporter
 import com.adarsh.hellomom.data.local.entity.BillingEntity
 import com.adarsh.hellomom.presentation.components.AppFooter
 import com.adarsh.hellomom.presentation.components.DateFilterRow
+import com.adarsh.hellomom.presentation.components.ListShimmer
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -155,7 +156,10 @@ fun BillingScreen(
             
             Spacer(modifier = Modifier.height(8.dp))
             
-            if (state.filteredBills.isEmpty()) {
+            if (state.isLoading) {
+                // Family members load the owner's bills over the network — shimmer until they arrive.
+                ListShimmer(modifier = Modifier.weight(1f))
+            } else if (state.filteredBills.isEmpty()) {
                 Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                     Text("No expenses recorded.")
                 }
