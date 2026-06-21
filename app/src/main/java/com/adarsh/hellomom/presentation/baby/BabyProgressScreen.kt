@@ -39,8 +39,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,6 +57,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -314,6 +316,56 @@ private fun BabyProgressRing(
     week: Int,
     dayOfWeek: Int
 ) {
+    val context = LocalContext.current
+    val babySizeRes = remember(week) {
+        val weekFormatted = String.format("%02d", week.coerceIn(1, 40))
+        // Map week 1, 2, 3 to sz_01... as per the user's list (1-3 uses poppy seed)
+        val namePart = when (week) {
+            1, 2, 3 -> "poppy_seed"
+            4 -> "sesame_seed"
+            5 -> "apple_seed"
+            6 -> "sweet_pea"
+            7 -> "blueberry"
+            8 -> "raspberry"
+            9 -> "grape"
+            10 -> "kumquat"
+            11 -> "fig"
+            12 -> "lime"
+            13 -> "lemon"
+            14 -> "nectarine"
+            15 -> "apple"
+            16 -> "avocado"
+            17 -> "pomegranate"
+            18 -> "sweet_potato"
+            19 -> "mango"
+            20 -> "banana"
+            21 -> "carrot"
+            22 -> "papaya"
+            23 -> "grapefruit"
+            24 -> "corn"
+            25 -> "rutabaga"
+            26 -> "scallion"
+            27 -> "cauliflower"
+            28 -> "eggplant"
+            29 -> "butternut_squash"
+            30 -> "cabbage"
+            31 -> "coconut"
+            32 -> "jicama"
+            33 -> "pineapple"
+            34 -> "cantaloupe"
+            35 -> "honeydew"
+            36 -> "romaine_lettuce"
+            37 -> "swiss_chard"
+            38 -> "leek"
+            39 -> "watermelon"
+            40 -> "pumpkin"
+            else -> "poppy_seed"
+        }
+        val resourceName = "sz_${if (week in 1..3) "01" else weekFormatted}_$namePart"
+        val id = context.resources.getIdentifier(resourceName, "drawable", context.packageName)
+        if (id != 0) id else R.drawable.ic_baby_transparent
+    }
+
     val animatedProgress by animateFloatAsState(
         targetValue = progress,
         animationSpec = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
@@ -405,25 +457,55 @@ private fun BabyProgressRing(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Bottom
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.ic_baby_transparent),
-                contentDescription = "Baby",
-                modifier = Modifier
-                    .size(150.dp)
-                    .scale(pulse)
-                    .graphicsLayer(alpha = 0.99f)
-                    .drawWithContent {
-                        drawContent()
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                0.0f to Color.White,
-                                0.95f to Color.White,
-                                1.0f to Color.Transparent
-                            ),
-                            blendMode = BlendMode.DstIn
-                        )
-                    }
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(bottom = 8.dp)
+            ) {
+                // The baby illustration
+                Image(
+                    painter = painterResource(id = R.drawable.ic_baby_transparent),
+                    contentDescription = "Baby",
+                    modifier = Modifier
+                        .size(110.dp)
+                        .scale(pulse)
+                        .graphicsLayer(alpha = 0.99f)
+                        .drawWithContent {
+                            drawContent()
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    0.0f to Color.White,
+                                    0.95f to Color.White,
+                                    1.0f to Color.Transparent
+                                ),
+                                blendMode = BlendMode.DstIn
+                            )
+                        }
+                )
+
+                Spacer(Modifier.width(12.dp))
+
+                // The fruit/seed "size" image
+                Image(
+                    painter = painterResource(id = babySizeRes),
+                    contentDescription = "Size Item",
+                    modifier = Modifier
+                        .size(90.dp)
+                        .scale(pulse)
+                        .graphicsLayer(alpha = 0.99f)
+                        .drawWithContent {
+                            drawContent()
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    0.0f to Color.White,
+                                    0.95f to Color.White,
+                                    1.0f to Color.Transparent
+                                ),
+                                blendMode = BlendMode.DstIn
+                            )
+                        }
+                )
+            }
             Text(
                 text = "Week $week",
                 style = MaterialTheme.typography.headlineSmall,
