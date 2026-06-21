@@ -170,7 +170,7 @@ fun DashboardScreen(
                         }
                     }
                 )
-            } else {
+            } else if (selectedTab == AppTab.HOME) {
                 TopAppBar(
                     title = {
                         Text(
@@ -217,10 +217,7 @@ fun DashboardScreen(
                 onSelect = { tab ->
                     // Leaving the AI view when a tab is tapped keeps the bottom bar behaving like tabs.
                     aiProvider = null
-                    if (tab == AppTab.PROFILE) {
-                        // Open the full Profile screen — identical to the top-bar avatar action.
-                        navController.navigate(Screen.Profile.route)
-                    } else if (tab == AppTab.BABY) {
+                    if (tab == AppTab.BABY) {
                         // Baby Progress is its own full screen, like Profile.
                         navController.navigate(Screen.BabyProgress.route)
                     } else {
@@ -302,11 +299,6 @@ fun DashboardScreen(
                             onUpdateWeight = { viewModel.sendIntent(DashboardIntent.UpdateWeight(it)) },
                             onUpdateSteps = { viewModel.sendIntent(DashboardIntent.UpdateSteps(it)) },
                             onIncrementKicks = { viewModel.sendIntent(DashboardIntent.IncrementKicks) }
-                        )
-                        AppTab.PROFILE -> ProfileTabContent(
-                            state = state,
-                            navController = navController,
-                            contentPadding = paddingValues
                         )
                         // Unreachable: tapping Baby navigates to its own screen instead of
                         // selecting the tab, but the when must stay exhaustive.
@@ -510,6 +502,7 @@ private fun QuickActionsTabContent(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .padding(contentPadding)
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -592,6 +585,7 @@ private fun YourHealthTabContent(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .padding(contentPadding)
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -624,251 +618,6 @@ private fun YourHealthTabContent(
         }
 
         item { Spacer(modifier = Modifier.height(32.dp)) }
-    }
-}
-
-/* ----------------------------------------------------------------------------
- * PROFILE TAB
- * User info, pregnancy details and links to settings, notifications, support.
- * -------------------------------------------------------------------------- */
-@Composable
-private fun ProfileTabContent(
-    state: DashboardState,
-    navController: NavController,
-    contentPadding: PaddingValues
-) {
-    val context = LocalContext.current
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(contentPadding)
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
-    ) {
-        item { ProfileTabHeader(state) }
-
-        item { PregnancyDetailsCard(state) }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = cardBG)
-            ) {
-                Column(
-                    modifier = Modifier.padding(8.dp)
-                ) {
-                    ProfileMenuItem(
-                        icon = Icons.Default.Person,
-                        title = "Profile & Account",
-                        subtitle = "View and manage your information",
-                        onClick = { navController.navigate(Screen.Profile.route) }
-                    )
-                    ProfileMenuItem(
-                        icon = Icons.Default.Settings,
-                        title = "Settings & Preferences",
-                        subtitle = "App settings and personalization",
-                        onClick = { navController.navigate(Screen.Settings.route) }
-                    )
-                    ProfileMenuItem(
-                        icon = Icons.Default.Notifications,
-                        title = "Notifications",
-                        subtitle = "Notification history",
-                        onClick = { navController.navigate(Screen.NotificationHistory.route) }
-                    )
-                    ProfileMenuItem(
-                        icon = Icons.Default.Help,
-                        title = "Support & Help",
-                        subtitle = "Get help using Hello Mom",
-                        onClick = { navController.navigate(Screen.HelpSupport.route) }
-                    )
-                    ProfileMenuItem(
-                        icon = Icons.Default.Share,
-                        title = "Share App",
-                        subtitle = "Invite family & friends to Hello Mom",
-                        onClick = {
-                            val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(android.content.Intent.EXTRA_SUBJECT, "Hello Mom+")
-                                putExtra(
-                                    android.content.Intent.EXTRA_TEXT,
-                                    "Try Hello Mom+ 🤰 — your pregnancy companion app.\nhttps://hello-mom-6e500.web.app"
-                                )
-                            }
-                            context.startActivity(android.content.Intent.createChooser(shareIntent, "Share Hello Mom+"))
-                        }
-                    )
-                    ProfileMenuItem(
-                        icon = Icons.Default.Info,
-                        title = "About",
-                        subtitle = "About Hello Mom",
-                        onClick = { navController.navigate(Screen.About.route) },
-                        showDivider = false
-                    )
-                }
-            }
-        }
-
-        item { AppFooter() }
-        item { Spacer(modifier = Modifier.height(32.dp)) }
-    }
-}
-
-@Composable
-private fun ProfileTabHeader(state: DashboardState) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(elevation = 8.dp, shape = RoundedCornerShape(24.dp)),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBG)
-    ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                if (state.user?.profilePicture != null) {
-                    AsyncImage(
-                        model = state.user!!.profilePicture,
-                        contentDescription = "Profile",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Text(
-                        text = state.user?.fullName?.take(1)?.uppercase() ?: "M",
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = state.user?.fullName ?: "Mom",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                if (!state.user?.email.isNullOrBlank()) {
-                    Text(
-                        text = state.user!!.email,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PregnancyDetailsCard(state: DashboardState) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(elevation = 4.dp, shape = RoundedCornerShape(24.dp)),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBG)
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "Pregnancy Details",
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleMedium
-            )
-            ProfileInfoRow(
-                icon = Icons.Default.CalendarToday,
-                label = "Progress",
-                value = "Week ${state.pregnancyWeek} Day ${state.pregnancyDay}"
-            )
-            ProfileInfoRow(
-                icon = Icons.Default.Timeline,
-                label = "Trimester",
-                value = "Trimester ${state.trimester}"
-            )
-            state.user?.dueDate?.let {
-                val sdf = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-                ProfileInfoRow(
-                    icon = Icons.Default.Event,
-                    label = "Expected Due Date",
-                    value = sdf.format(Date(it))
-                )
-            }
-            if (!state.user?.mobileNumber.isNullOrBlank()) {
-                ProfileInfoRow(
-                    icon = Icons.Default.Phone,
-                    label = "Mobile Number",
-                    value = state.user!!.mobileNumber
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProfileInfoRow(icon: ImageVector, label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-        Spacer(modifier = Modifier.width(12.dp))
-        Column {
-            Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-            Text(text = value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-        }
-    }
-}
-
-@Composable
-private fun ProfileMenuItem(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
-    showDivider: Boolean = true
-) {
-    Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onClick() }
-                .padding(horizontal = 12.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge)
-                Text(text = subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-            }
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
-        }
-        if (showDivider) {
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 12.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-            )
-        }
     }
 }
 
@@ -1829,6 +1578,19 @@ fun FamilyQuickView(members: List<FamilyMemberEntity>, hasAccess: Boolean) {
         Spacer(modifier = Modifier.height(12.dp))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             members.forEach { member ->
+                val avatarColors = remember(member.name) {
+                    val colors = listOf(
+                        Color(0xFFE0F7FA) to Color(0xFF006064), // Cyan
+                        Color(0xFFF1F8E9) to Color(0xFF33691E), // Light Green
+                        Color(0xFFFFF3E0) to Color(0xFFE65100), // Orange
+                        Color(0xFFFCE4EC) to Color(0xFF880E4F), // Pink
+                        Color(0xFFF3E5F5) to Color(0xFF4A148C), // Purple
+                        Color(0xFFE8EAF6) to Color(0xFF1A237E), // Indigo
+                        Color(0xFFE0F2F1) to Color(0xFF004D40)  // Teal
+                    )
+                    colors[Math.abs(member.name.hashCode()) % colors.size]
+                }
+
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -1844,10 +1606,14 @@ fun FamilyQuickView(members: List<FamilyMemberEntity>, hasAccess: Boolean) {
                                 modifier = Modifier
                                     .size(40.dp)
                                     .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                                    .background(avatarColors.first),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(text = member.name.take(1).uppercase(), fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = member.name.take(1).uppercase(),
+                                    fontWeight = FontWeight.Bold,
+                                    color = avatarColors.second
+                                )
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {

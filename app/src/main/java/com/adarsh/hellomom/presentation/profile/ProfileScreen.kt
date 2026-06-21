@@ -150,12 +150,12 @@ fun ProfileScreen(
         bottomBar = {
             // Same bottom bar as the dashboard so Profile feels like a main section.
             AppBottomNavBar(
-                selectedTab = AppTab.PROFILE,
+                selectedTab = null,
                 onSelect = { tab ->
                     if (tab == AppTab.BABY) {
                         // Baby Progress is its own full screen, like Profile.
                         navController.navigate(Screen.BabyProgress.route)
-                    } else if (tab != AppTab.PROFILE) {
+                    } else {
                         navigateToDashboardTab(navController, tab.ordinal)
                     }
                 }

@@ -114,10 +114,10 @@ fun BabyProgressScreen(
             AppBottomNavBar(
                 selectedTab = AppTab.BABY,
                 onSelect = { tab ->
-                    when (tab) {
-                        AppTab.BABY -> Unit
-                        AppTab.PROFILE -> navController.navigate(Screen.Profile.route)
-                        else -> navigateToDashboardTab(navController, tab.ordinal)
+                    if (tab == AppTab.BABY) {
+                        // Already here.
+                    } else {
+                        navigateToDashboardTab(navController, tab.ordinal)
                     }
                 }
             )

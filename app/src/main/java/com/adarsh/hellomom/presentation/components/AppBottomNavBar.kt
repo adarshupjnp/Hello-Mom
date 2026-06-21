@@ -20,19 +20,18 @@ import androidx.compose.ui.unit.dp
 /** SavedStateHandle key used to ask the dashboard to switch to a specific tab. */
 const val NAV_SELECTED_TAB_KEY = "main_selected_tab"
 
-/** The main sections, shared by the dashboard and the Profile / Baby Progress screens. */
+/** The main sections, shared by the dashboard and the Baby Progress screen. */
 enum class AppTab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home),
-    ACTIONS("Quick Actions", Icons.Default.GridView),
+    ACTIONS("Quick", Icons.Default.GridView),
     BABY("Baby", Icons.Default.ChildCare),
-    HEALTH("Health", Icons.Default.MonitorHeart),
-    PROFILE("Profile", Icons.Default.Person)
+    HEALTH("Health", Icons.Default.MonitorHeart)
 }
 
-/** Shared bottom navigation bar so every main section (incl. Profile) looks identical. */
+/** Shared bottom navigation bar so every main section looks identical. */
 @Composable
 fun AppBottomNavBar(
-    selectedTab: AppTab,
+    selectedTab: AppTab?,
     onSelect: (AppTab) -> Unit
 ) {
     NavigationBar(
