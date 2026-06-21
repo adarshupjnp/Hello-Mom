@@ -457,56 +457,30 @@ private fun BabyProgressRing(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Bottom
         ) {
-            // The baby illustration and the fruit/seed "size" image side by side
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.padding(bottom = 8.dp)
-            ) {
-                // The baby illustration
-                Image(
-                    painter = painterResource(id = R.drawable.ic_baby_transparent),
-                    contentDescription = "Baby",
-                    modifier = Modifier
-                        .size(110.dp)
-                        .scale(pulse)
-                        .graphicsLayer(alpha = 0.99f)
-                        .drawWithContent {
-                            drawContent()
-                            drawCircle(
-                                brush = Brush.radialGradient(
-                                    0.0f to Color.White,
-                                    0.95f to Color.White,
-                                    1.0f to Color.Transparent
-                                ),
-                                blendMode = BlendMode.DstIn
-                            )
-                        }
-                )
+            // The dynamic illustration: shows the fruit/seed for the current week,
+            // or falls back to the baby icon if the week's specific image is missing.
+            Image(
+                painter = painterResource(id = babySizeRes),
+                contentDescription = "Baby Progress Illustration",
+                modifier = Modifier
+                    .size(150.dp)
+                    .scale(pulse)
+                    .graphicsLayer(alpha = 0.99f)
+                    .drawWithContent {
+                        drawContent()
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                0.0f to Color.White,
+                                0.95f to Color.White,
+                                1.0f to Color.Transparent
+                            ),
+                            blendMode = BlendMode.DstIn
+                        )
+                    }
+            )
 
-                Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.height(12.dp))
 
-                // The dynamic fruit/seed image
-                Image(
-                    painter = painterResource(id = babySizeRes),
-                    contentDescription = "Size Item",
-                    modifier = Modifier
-                        .size(110.dp) // Updated to match the baby image size as requested
-                        .scale(pulse)
-                        .graphicsLayer(alpha = 0.99f)
-                        .drawWithContent {
-                            drawContent()
-                            drawCircle(
-                                brush = Brush.radialGradient(
-                                    0.0f to Color.White,
-                                    0.95f to Color.White,
-                                    1.0f to Color.Transparent
-                                ),
-                                blendMode = BlendMode.DstIn
-                            )
-                        }
-                )
-            }
             Text(
                 text = "Week $week",
                 style = MaterialTheme.typography.headlineSmall,

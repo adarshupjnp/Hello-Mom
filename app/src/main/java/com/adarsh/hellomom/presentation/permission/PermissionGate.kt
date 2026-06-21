@@ -13,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -55,6 +56,7 @@ fun PermissionGate() {
 
     var notifGranted by remember { mutableStateOf(hasNotificationPermission(context)) }
     var requestingNotif by remember { mutableStateOf(false) }
+    var showNotifRationale by remember { mutableStateOf(false) }
     var alarmGranted by remember { mutableStateOf(canScheduleExactAlarms(context)) }
     // Bumped to trigger another system popup (the launcher can't be referenced inside its own
     // result callback, so the re-request is routed through this tick + a LaunchedEffect).
@@ -74,12 +76,16 @@ fun PermissionGate() {
     ) { granted ->
         notifGranted = granted
         requestingNotif = false
-        if (!granted && activity != null &&
-            ActivityCompat.shouldShowRequestPermissionRationale(
-                activity, Manifest.permission.POST_NOTIFICATIONS
-            )
-        ) {
-            notifRequestTick++ // ask again right away (OS will still show the popup)
+        if (!granted && activity != null) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(
+                    activity, Manifest.permission.POST_NOTIFICATIONS
+                )
+            ) {
+                notifRequestTick++ // ask again right away (OS will still show the popup)
+            } else {
+                // System popup is permanently denied/blocked; show custom rationale instead
+                showNotifRationale = true
+            }
         }
     }
 
@@ -106,6 +112,9 @@ fun PermissionGate() {
             if (event == Lifecycle.Event.ON_RESUME) {
                 notifGranted = hasNotificationPermission(context)
                 alarmGranted = canScheduleExactAlarms(context)
+                // If they came back from Settings and still haven't allowed, reset rationale 
+                // state so we can re-try the system popup or show the custom dialog again.
+                showNotifRationale = false 
                 if (!notifGranted && !requestingNotif &&
                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 ) {
@@ -129,6 +138,19 @@ fun PermissionGate() {
                 "screen — without it, reminders may be delayed or missed.",
             confirmLabel = "Allow",
             onConfirm = { context.openExactAlarmSettings() }
+        )
+    }
+
+    // Forceful notification rationale dialog shown once the system popup is exhausted.
+    if (!notifGranted && showNotifRationale) {
+        RequiredPermissionDialog(
+            icon = Icons.Default.Notifications,
+            title = "Notifications Required",
+            message = "Hello Mom+ needs notification access to send you important pregnancy " +
+                "updates and reminders. Since this was previously denied, please enable it in " +
+                "App Settings to continue.",
+            confirmLabel = "Allow",
+            onConfirm = { context.openAppNotificationSettings() }
         )
     }
 }
