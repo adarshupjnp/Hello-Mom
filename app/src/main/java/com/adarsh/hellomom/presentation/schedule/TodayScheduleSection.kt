@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.AlertDialog
@@ -196,17 +197,13 @@ private fun ScheduleRow(
         Spacer(Modifier.width(12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (item.isDone) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                    textDecoration = if (item.isDone) TextDecoration.LineThrough else TextDecoration.None
-                )
-                Spacer(Modifier.width(8.dp))
-                StatusPill(isDone = item.isDone)
-            }
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = if (item.isDone) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                textDecoration = if (item.isDone) TextDecoration.LineThrough else TextDecoration.None
+            )
             if (item.subtitle.isNotBlank()) {
                 Text(
                     text = item.subtitle,
@@ -216,11 +213,18 @@ private fun ScheduleRow(
                 )
             }
             if (item.time.isNotBlank()) {
-                Text(
-                    text = item.time,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 2.dp)
+                ) {
+                    Text(
+                        text = item.time,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    StatusPill(isDone = item.isDone)
+                }
             }
         }
 
@@ -356,12 +360,14 @@ private fun iconFor(item: ScheduleItem): ImageVector = when (item.type) {
     ScheduleItemType.MEDICINE -> Icons.Default.Medication
     ScheduleItemType.MEAL -> Icons.Default.Restaurant
     ScheduleItemType.ROUTINE -> if (item.refId == "sleep") Icons.Default.Bedtime else Icons.Default.WbSunny
+    ScheduleItemType.REMINDER -> Icons.Default.Notifications
 }
 
 private fun accentFor(item: ScheduleItem): Color = when (item.type) {
     ScheduleItemType.MEDICINE -> Color(0xFF5C6BC0)
     ScheduleItemType.MEAL -> Color(0xFF66BB6A)
     ScheduleItemType.ROUTINE -> if (item.refId == "sleep") Color(0xFF9575CD) else Color(0xFFFFB300)
+    ScheduleItemType.REMINDER -> Color(0xFFF06292)
 }
 
 private fun formatToday(): String =

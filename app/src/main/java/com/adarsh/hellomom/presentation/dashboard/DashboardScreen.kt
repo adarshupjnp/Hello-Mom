@@ -1153,11 +1153,6 @@ fun MotherHealthSection(
                 color = Color(0xFFF06292),
                 onClick = { if (hasAccess) showDialog = HealthDialogType.WEIGHT }
             )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             HealthCard(
                 title = "Steps",
                 value = healthData.steps.toString(),
@@ -1167,8 +1162,6 @@ fun MotherHealthSection(
                 color = Color(0xFFFFB74D),
                 onClick = { if (hasAccess) showDialog = HealthDialogType.STEPS }
             )
-            // Keep Steps at half width to match the cards above.
-            Spacer(modifier = Modifier.weight(1f))
         }
     }
 }

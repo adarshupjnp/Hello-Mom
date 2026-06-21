@@ -8,9 +8,11 @@ import com.adarsh.hellomom.data.local.SyncStatus
 import com.adarsh.hellomom.data.local.entity.DailyScheduleStatusEntity
 import com.adarsh.hellomom.data.local.entity.MealEntity
 import com.adarsh.hellomom.data.local.entity.MedicineEntity
+import com.adarsh.hellomom.data.local.entity.ReminderEntity
 import com.adarsh.hellomom.data.local.entity.UserEntity
 import com.adarsh.hellomom.domain.repository.FoodRepository
 import com.adarsh.hellomom.domain.repository.MedicineRepository
+import com.adarsh.hellomom.domain.repository.ReminderRepository
 import com.adarsh.hellomom.domain.repository.ScheduleRepository
 import com.adarsh.hellomom.domain.repository.SyncRepository
 import com.adarsh.hellomom.domain.repository.UserRepository
@@ -39,6 +41,7 @@ class TodayScheduleViewModel @Inject constructor(
     private val medicineRepository: MedicineRepository,
     private val foodRepository: FoodRepository,
     private val userRepository: UserRepository,
+    private val reminderRepository: ReminderRepository,
     private val scheduleRepository: ScheduleRepository,
     private val syncRepository: SyncRepository
 ) : BaseViewModel<TodayScheduleIntent, TodayScheduleState, TodayScheduleEffect>() {
@@ -84,9 +87,10 @@ class TodayScheduleViewModel @Inject constructor(
                 medicineRepository.getMedicines(targetUserId),
                 foodRepository.getMeals(targetUserId),
                 userRepository.getUser(targetUserId),
-                scheduleRepository.getDailyStatuses(targetUserId, today)
-            ) { meds, meals, owner, statuses ->
-                buildSchedule(meds, meals, owner, statuses)
+                scheduleRepository.getDailyStatuses(targetUserId, today),
+                reminderRepository.getAllReminders()
+            ) { meds, meals, owner, statuses, reminders ->
+                buildSchedule(meds, meals, owner, statuses, reminders.filter { it.userId == targetUserId && it.date == today })
             }.catch { e ->
                 SyncLogger.error("TodaySchedule flow failed", e)
                 setState { copy(isLoading = false) }
@@ -142,7 +146,8 @@ class TodayScheduleViewModel @Inject constructor(
         meds: List<MedicineEntity>,
         meals: List<MealEntity>,
         owner: UserEntity?,
-        statuses: List<DailyScheduleStatusEntity>
+        statuses: List<DailyScheduleStatusEntity>,
+        reminders: List<ReminderEntity>
     ): Built {
         val wake = owner?.wakeUpTime?.takeIf { it.isNotBlank() } ?: TodayScheduleState.DEFAULT_WAKE
         val sleep = owner?.sleepTime?.takeIf { it.isNotBlank() } ?: TodayScheduleState.DEFAULT_SLEEP
@@ -190,6 +195,20 @@ class TodayScheduleViewModel @Inject constructor(
                 time = meal.timing,
                 sortMinutes = parseMinutes(meal.timing),
                 isDone = done(ScheduleItemType.MEAL, meal.mealId)
+            )
+        }
+
+        // Add Reminders (Coconut Water, Lunch meal, evening meal, dinner, etc.)
+        reminders.forEach { r ->
+            val displayTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(r.time))
+            items += ScheduleItem(
+                refId = r.id.toString(),
+                type = ScheduleItemType.REMINDER,
+                title = r.title,
+                subtitle = r.description,
+                time = displayTime,
+                sortMinutes = parseMinutes(displayTime),
+                isDone = done(ScheduleItemType.REMINDER, r.id.toString())
             )
         }
 

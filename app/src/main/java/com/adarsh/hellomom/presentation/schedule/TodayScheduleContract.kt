@@ -4,8 +4,8 @@ import com.adarsh.hellomom.core.UiEffect
 import com.adarsh.hellomom.core.UiIntent
 import com.adarsh.hellomom.core.UiState
 
-/** The three kinds of rows that make up Today's Schedule. The name is also the sync `type`. */
-enum class ScheduleItemType { ROUTINE, MEDICINE, MEAL }
+/** The kinds of rows that make up Today's Schedule. The name is also the sync `type`. */
+enum class ScheduleItemType { ROUTINE, MEDICINE, MEAL, REMINDER }
 
 /** A single timeline row (a wake/sleep marker, a medicine, or a meal) with today's done state. */
 data class ScheduleItem(
