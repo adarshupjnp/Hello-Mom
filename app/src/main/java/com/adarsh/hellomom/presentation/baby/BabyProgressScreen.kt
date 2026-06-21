@@ -463,7 +463,7 @@ private fun BabyProgressRing(
                 painter = painterResource(id = babySizeRes),
                 contentDescription = "Baby Progress Illustration",
                 modifier = Modifier
-                    .size(150.dp)
+                    .size(160.dp)
                     .scale(pulse)
                     .graphicsLayer(alpha = 0.99f)
                     .drawWithContent {
@@ -478,8 +478,6 @@ private fun BabyProgressRing(
                         )
                     }
             )
-
-            Spacer(Modifier.height(12.dp))
 
             Text(
                 text = "Week $week",
