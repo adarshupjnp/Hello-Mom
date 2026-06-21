@@ -3,6 +3,7 @@ package com.adarsh.hellomom.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.adarsh.hellomom.data.local.SyncStatus
+import com.google.firebase.firestore.PropertyName
 
 /**
  * One "done / pending" mark for a single Today's Schedule row on a specific day.
@@ -27,11 +28,17 @@ data class DailyScheduleStatusEntity(
     val type: String = "",
     /** Source id: medicineId / mealId / routine key ("wakeup" | "sleep"). */
     val refId: String = "",
-    val isDone: Boolean = false,
+    // @PropertyName forces a stable Firestore field name. Without it, Kotlin's `isDone` getter makes
+    // the SDK serialize the field as "done" but deserialize by the backing field "isDone" — so the
+    // owner's tick (written true) reads back as false on family devices. The done flag must survive
+    // the round-trip, so we pin the name explicitly. (See also isDeleted below.)
+    @get:PropertyName("isDone") @set:PropertyName("isDone")
+    var isDone: Boolean = false,
     val doneAt: Long? = null,
 
     val syncStatus: SyncStatus = SyncStatus.PENDING,
     val updatedAt: Long = System.currentTimeMillis(),
     val lastSyncedAt: Long? = null,
-    val isDeleted: Boolean = false
+    @get:PropertyName("isDeleted") @set:PropertyName("isDeleted")
+    var isDeleted: Boolean = false
 )

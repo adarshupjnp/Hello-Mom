@@ -34,7 +34,13 @@ import com.adarsh.hellomom.notification.AppointmentReminderScheduler
 import com.adarsh.hellomom.notification.ReminderManager
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
@@ -62,7 +68,9 @@ class SyncRepositoryImpl @Inject constructor(
 ) : SyncRepository {
 
     // Serialises concurrent syncAll() calls (screen loads + WorkManager can overlap) and lets
-    // syncIfStale() skip work when the cache is fresh or a sync is already in flight.
+    // syncIfStale() skip work when the cache is fresh or a sync is already in flight. The real-time
+    // mirror pulls share this same lock so a snapshot-triggered pull can never run concurrently with
+    // a syncAll pull against the same Room tables (both reconcile via delete-not-in).
     private val syncMutex = Mutex()
 
     @Volatile
@@ -171,6 +179,73 @@ class SyncRepositoryImpl @Inject constructor(
     override suspend fun pullOwnerData(ownerUserId: String): Result<Unit> {
         val isOwnerDevice = firebaseAuth.currentUser?.uid == ownerUserId
         return pullOwnerDataInternal(ownerUserId, isOwnerDevice)
+    }
+
+    /**
+     * Real-time mirror for family members (see [SyncRepository.observeOwnerRealtime]). Attaches a
+     * snapshot listener to each of the owner's shared collections; any remote change funnels a
+     * signal into a conflated channel that a single pump coroutine drains by re-pulling the owner's
+     * data into Room. Conflation collapses bursts (and the initial flurry of "first snapshot"
+     * callbacks) into one pull, and [realtimeMutex] guarantees pulls never overlap. Listeners are
+     * detached in awaitClose when the collector's scope is cancelled.
+     */
+    override fun observeOwnerRealtime(ownerUserId: String): Flow<Unit> = callbackFlow {
+        if (ownerUserId.isEmpty()) {
+            SyncLogger.warn("observeOwnerRealtime: empty ownerId, no listeners attached")
+            awaitClose { }
+            return@callbackFlow
+        }
+
+        // CONFLATED: while a pull is in flight, additional change signals collapse into a single
+        // pending one, so N collections changing at once still triggers just one extra pull.
+        val signals = Channel<Unit>(Channel.CONFLATED)
+
+        val pump = launch(Dispatchers.IO) {
+            for (ignored in signals) {
+                runCatching { syncMutex.withLock { pullOwnerDataInternal(ownerUserId, isOwnerDevice = false) } }
+                    .onSuccess {
+                        // Keep the staleness clock fresh so a navigation syncIfStale() doesn't
+                        // immediately re-pull on top of the real-time refresh.
+                        lastSuccessfulSyncAt = System.currentTimeMillis()
+                        trySend(Unit)
+                    }
+                    .onFailure { SyncLogger.warn("realtime mirror pull failed ownerId=$ownerUserId", it) }
+            }
+        }
+
+        // Per-user subcollections that family members view. health_metrics & kicks already have
+        // their own dashboard listeners, so they're intentionally omitted here.
+        val ownerDoc = firestore.collection("users").document(ownerUserId)
+        val collections = listOf(
+            "appointments", "medicines", "daily_schedule_status", "meals", "water_intake",
+            "bills", "contractions", "journal", "symptoms", "reports", "family_members"
+        )
+        val registrations = mutableListOf<ListenerRegistration>()
+
+        val onChange: (String) -> Unit = { source ->
+            SyncLogger.firebaseRead("REALTIME change", "users/$ownerUserId/$source", "→ mirror pull")
+            signals.trySend(Unit)
+        }
+
+        collections.forEach { col ->
+            registrations += ownerDoc.collection(col).addSnapshotListener { _, error ->
+                if (error == null) onChange(col)
+            }
+        }
+        // Owner profile doc (pregnancyStartDate / wake-sleep times) and the top-level reminders.
+        registrations += ownerDoc.addSnapshotListener { _, error -> if (error == null) onChange("profile") }
+        registrations += firestore.collection("reminders")
+            .whereEqualTo("userId", ownerUserId)
+            .addSnapshotListener { _, error -> if (error == null) onChange("reminders") }
+
+        SyncLogger.info("observeOwnerRealtime ATTACHED ownerId=$ownerUserId listeners=${registrations.size}")
+
+        awaitClose {
+            registrations.forEach { runCatching { it.remove() } }
+            signals.close()
+            pump.cancel()
+            SyncLogger.info("observeOwnerRealtime DETACHED ownerId=$ownerUserId")
+        }
     }
 
     /**

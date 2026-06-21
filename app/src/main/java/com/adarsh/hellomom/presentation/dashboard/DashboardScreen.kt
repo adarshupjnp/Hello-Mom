@@ -44,6 +44,9 @@ import com.adarsh.hellomom.data.local.entity.*
 import com.adarsh.hellomom.domain.repository.MotherHealthData
 import com.adarsh.hellomom.navigation.Screen
 import com.adarsh.hellomom.presentation.components.DashboardShimmer
+import com.adarsh.hellomom.presentation.components.OfflineBanner
+import com.adarsh.hellomom.presentation.components.OfflineScreen
+import com.adarsh.hellomom.presentation.components.rememberIsOnline
 import com.adarsh.hellomom.presentation.components.AppFooter
 import com.adarsh.hellomom.presentation.components.AiWebView
 import com.adarsh.hellomom.presentation.components.AppBottomNavBar
@@ -106,6 +109,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val isOnline by rememberIsOnline()
 
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
     val selectedTab = AppTab.entries[selectedIndex]
@@ -251,7 +255,16 @@ fun DashboardScreen(
                 )
         ) {
             if (state.isLoading) {
-                DashboardShimmer()
+                // While first-load data is still resolving: if we're offline with nothing to show,
+                // a friendly offline screen beats an endless shimmer.
+                if (!isOnline) {
+                    OfflineScreen(
+                        onRetry = { viewModel.sendIntent(DashboardIntent.Refresh) },
+                        contentPadding = paddingValues
+                    )
+                } else {
+                    DashboardShimmer()
+                }
             } else if (aiProvider != null) {
                 // AI assistant opens inside the scaffold so the bottom bar stays visible.
                 AiWebView(
@@ -307,6 +320,15 @@ fun DashboardScreen(
                     }
                 }
             }
+
+            // Floating offline banner under the top app bar — appears whenever connectivity drops,
+            // so the user always knows when data may be stale (owner and family alike).
+            OfflineBanner(
+                isOnline = isOnline,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(paddingValues)
+            )
         }
     }
 }

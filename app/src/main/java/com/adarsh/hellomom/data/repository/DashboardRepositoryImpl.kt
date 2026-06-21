@@ -8,6 +8,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
@@ -50,6 +52,11 @@ class DashboardRepositoryImpl @Inject constructor(
             }
         awaitClose { subscription.remove() }
     }
+        // Emit a default up-front so the dashboard's combine() never blocks waiting on this
+        // Firestore listener — a fresh, offline family login would otherwise hang on an infinite
+        // shimmer because the snapshot may not arrive until the network is back.
+        .onStart { emit(MotherHealthData()) }
+        .catch { emit(MotherHealthData()) }
 
     override suspend fun updateMotherHealthData(userId: String, healthData: MotherHealthData): Result<Unit> {
         return try {
@@ -75,6 +82,9 @@ class DashboardRepositoryImpl @Inject constructor(
             }
         awaitClose { subscription.remove() }
     }
+        // Same reasoning as getMotherHealthData: never let the dashboard combine() stall offline.
+        .onStart { emit(0) }
+        .catch { emit(0) }
 
     override suspend fun incrementKickCount(userId: String): Result<Unit> {
         return try {

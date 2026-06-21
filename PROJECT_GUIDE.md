@@ -62,6 +62,13 @@ Room (local, source of truth for the UI) ↔ Firestore (cloud, shared between de
 | reports | ReportEntity (metadata; file stays local) | `users/{uid}/reports/{id}` | `syncStatus` | hard, reconciled |
 | family_members | FamilyMemberEntity | `users/{ownerId}/family_members/{memberId}` | `syncStatus` | reconciled |
 | reminders | ReminderEntity (Int autoincrement id) | **top-level** `reminders/{id}` filtered by `userId` | `synced: Boolean` (legacy, different from others) | hard, reconciled + alarm cancel |
+| daily_schedule_status | DailyScheduleStatusEntity (key = `{date}_{type}_{refId}`) | `users/{uid}/daily_schedule_status/{id}` | `syncStatus` | reconciled (rows persist per day; daily reset is implicit — a new date has no rows) |
+
+The owner's daily wake-up / sleep times for Today's Schedule live on `UserEntity.wakeUpTime` /
+`sleepTime` (synced as part of the profile doc). The "Today's Schedule" section (Your Health tab)
+is a self-contained feature in `presentation/schedule/` (`TodayScheduleSection` +
+`TodayScheduleViewModel`) — it derives a time-ordered timeline from medicines + today's meals +
+those routine times and overlays the daily marks above; it does NOT touch `DashboardViewModel`.
 
 Outside Room:
 - `users/{uid}/health_metrics/current` and `users/{uid}/kicks/{date}` — Firestore-only, read via
@@ -74,6 +81,15 @@ Outside Room:
 **Rule for new entities:** all fields need default values (Firestore `toObjects()` requires a
 no-arg constructor) + add `syncStatus`/`updatedAt`, and wire them into ALL THREE places in
 `SyncRepositoryImpl`: push (pending), pull (upsert as SYNCED), reconcile (delete-not-in).
+
+**Firestore + Kotlin `is`-prefixed booleans — MUST annotate.** A Kotlin `val isDone: Boolean`
+serializes through its `isDone()` getter, so Firestore stores the field as `done` (the "is" is
+stripped) but on read matches the backing field `isDone` → a `true` value silently comes back
+`false`. This was the Upcoming green-tick sync bug (owner read it from Room and saw the tick;
+family read it from Firestore and never did, even on manual refresh). Every shared boolean flag
+that must round-trip as `true` (`isDone`, `isCompleted`, `isTaken`, `isDeleted`) is pinned with
+`@get:PropertyName("…") @set:PropertyName("…")` and declared `var`. Do the same for any new
+is-prefixed boolean on a Firestore-synced entity.
 
 ## 5. Sync — how data moves (read this before touching sync)
 
@@ -112,7 +128,22 @@ lands — family members never need a manual sync.
 ### Real-time vs throttled
 - Real-time (Firestore listeners): dashboard health metrics, kicks, week content, and the
   reminder screen's `reminders` listener (scoped to the owner's userId, detached in `onCleared`).
+- **Family dashboard real-time mirror**: `SyncRepository.observeOwnerRealtime(ownerId)` attaches
+  snapshot listeners on all of the owner's shared collections and, on any change, re-pulls via
+  `pullOwnerData` (reusing the one reconcile + alarm path). `DashboardViewModel` collects it for
+  **family members only** (owners already see their own writes from Room; re-pulling could clobber
+  an unpushed local edit). Signals are conflated and serialised by `realtimeMutex`. Because the
+  Dashboard ViewModel stays in the back stack, the mirror keeps every Room-backed screen live with
+  no manual refresh. Listeners detach in `awaitClose` when the scope is cancelled.
 - Everything else: ≤ 60 s stale on navigation, ≤ 15 min in the background.
+
+### Offline / connectivity
+- The two dashboard Firestore-listener flows (`getMotherHealthData`, `getDailyKickCount`) end with
+  `.onStart { emit(default) }.catch { emit(default) }` so the dashboard `combine()` never stalls
+  on an offline first-load (the old infinite-shimmer bug for a fresh family login with no cache).
+- `presentation/components/Connectivity.kt`: `rememberIsOnline()` (live `NetworkCallback`-backed
+  state), `OfflineBanner` (slim top banner when offline), `OfflineScreen` (full retry screen shown
+  instead of shimmer when offline with nothing cached). The Dashboard uses all three.
 
 ## 6. Pregnancy week calculation
 
@@ -143,6 +174,15 @@ All local notifications go through `notification/ReminderManager` (exact AlarmMa
   ranges so they can never collide with reminder row ids.
 - FCM (`service/MyFirebaseMessagingService`) is used for reminder voice pushes only — it is NOT a
   data-sync channel.
+- **Permission gate** (`presentation/permission/PermissionGate.kt`, hosted in `MainActivity`):
+  flow: (1) on launch, show the Android **system** notification popup — no custom dialog. If the
+  user **doesn't allow**, immediately re-show the same system popup (gated by
+  `shouldShowRequestPermissionRationale` + a `requestingNotif` guard + a `notifRequestTick` so it
+  can't loop once permanently denied), and re-ask again on each `ON_RESUME`. (2) Once notifications
+  are **allowed**, show the custom "Allow Alarms & Reminders" dialog → its Allow button opens
+  `ACTION_REQUEST_SCHEDULE_EXACT_ALARM` (exact alarms have no runtime popup). Alarm state is
+  re-checked on `ON_RESUME` so the dialog clears after the user returns from Settings. The custom
+  dialog is used ONLY for alarms — never for notifications. Camera/mic are best-effort (optional).
 
 ## 8. Crash-safety conventions (follow these in new code)
 

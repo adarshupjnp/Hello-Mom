@@ -1,16 +1,12 @@
 package com.adarsh.hellomom
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -23,6 +19,7 @@ import com.adarsh.hellomom.core.FcmTokenManager
 import com.adarsh.hellomom.core.utils.VoiceAssistant
 import com.adarsh.hellomom.data.local.PreferenceManager
 import com.adarsh.hellomom.navigation.NavGraph
+import com.adarsh.hellomom.presentation.permission.PermissionGate
 import com.adarsh.hellomom.presentation.update.UpdateChecker
 import com.adarsh.hellomom.ui.theme.HelloMomTheme
 import com.google.firebase.auth.FirebaseAuth
@@ -90,7 +87,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             HelloMomTheme {
-                PermissionRequest()
+                PermissionGate()
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
@@ -135,38 +132,6 @@ class MainActivity : ComponentActivity() {
                 Log.d("DEEP_LINK", "Navigating with code: $code")
                 navController.navigate("invite/$code") {
                     launchSingleTop = true
-                }
-            }
-        }
-    }
-
-    @androidx.compose.runtime.Composable
-    private fun PermissionRequest() {
-        val permissions = mutableListOf<String>()
-        permissions.add(Manifest.permission.CAMERA)
-        permissions.add(Manifest.permission.RECORD_AUDIO)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-
-        val launcher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.RequestMultiplePermissions()
-        ) { _ -> }
-
-        LaunchedEffect(Unit) {
-            if (permissions.isNotEmpty()) {
-                launcher.launch(permissions.toTypedArray())
-            }
-
-            // Special handling for Exact Alarm Permission (Android 12+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val alarmManager = getSystemService(android.app.AlarmManager::class.java)
-                if (!alarmManager.canScheduleExactAlarms()) {
-                    val intent = Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                        data = android.net.Uri.fromParts("package", packageName, null)
-                    }
-                    startActivity(intent)
                 }
             }
         }

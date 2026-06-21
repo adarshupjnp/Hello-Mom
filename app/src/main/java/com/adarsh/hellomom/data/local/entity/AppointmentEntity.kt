@@ -3,6 +3,7 @@ package com.adarsh.hellomom.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.adarsh.hellomom.data.local.SyncStatus
+import com.google.firebase.firestore.PropertyName
 
 @Entity(tableName = "appointments")
 data class AppointmentEntity(
@@ -19,5 +20,8 @@ data class AppointmentEntity(
 
     val syncStatus: SyncStatus = SyncStatus.PENDING,
     val updatedAt: Long = System.currentTimeMillis(),
-    val isDeleted: Boolean = false
+    // Pin the Firestore field name (Kotlin is-prefixed booleans otherwise lose a true value across
+    // a write/read round-trip — see DailyScheduleStatusEntity for the full explanation).
+    @get:PropertyName("isDeleted") @set:PropertyName("isDeleted")
+    var isDeleted: Boolean = false
 )

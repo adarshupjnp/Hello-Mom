@@ -44,10 +44,24 @@ class ReminderViewModel @Inject constructor(
     private val _selectedDate = MutableStateFlow<Long?>(null)
     val selectedDate = _selectedDate.asStateFlow()
 
+    val reminders = reminderRepository.getAllReminders()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val displayedReminders: StateFlow<List<ReminderEntity>> =
-        combine(_familyReminders, _selectedDate) { list, date ->
+        combine(_familyReminders, reminders, _selectedDate) { liveList, roomList, date ->
+            // Show reminders from BOTH the live Firestore listener AND the Room-backed list that the
+            // sync layer keeps populated (pullOwnerData). Family members rely on the synced Room copy
+            // — exactly like every other shared screen (appointments, medicines …) — so their
+            // reminders still appear even when the live listener's owner-id resolution lags or
+            // resolves late on screen open. The listener is kept for instant updates on the owner's
+            // device. Merge is deduped by id, preferring the freshest copy (highest updatedAt) so a
+            // status change (e.g. Mark Done) from either source always wins.
+            val merged = (liveList + roomList)
+                .groupBy { it.id }
+                .map { (_, copies) -> copies.maxByOrNull { it.updatedAt }!! }
+
             val filtered = if (date == null) {
-                list // "All"
+                merged // "All"
             } else {
                 // Match on the reminder's actual fire time falling inside the selected calendar
                 // day [startOfDay, startOfDay + 24h). This is more reliable than comparing the
@@ -55,7 +69,7 @@ class ReminderViewModel @Inject constructor(
                 // so Today / Yesterday / Custom filters always reflect when the reminder really fires.
                 val dayStart = startOfDay(date)
                 val dayEnd = dayStart + DAY_MILLIS
-                list.filter { it.time in dayStart until dayEnd }
+                merged.filter { it.time in dayStart until dayEnd }
             }
             // Always present the day as a real morning -> night timeline (earliest time first),
             // so the UI can render a single chronological list and reminders never jump around
@@ -66,9 +80,6 @@ class ReminderViewModel @Inject constructor(
     fun setDateFilter(date: Long?) {
         _selectedDate.value = date
     }
-
-    val reminders = reminderRepository.getAllReminders()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _uiState = MutableStateFlow(ReminderUiState())
     val uiState = _uiState.asStateFlow()

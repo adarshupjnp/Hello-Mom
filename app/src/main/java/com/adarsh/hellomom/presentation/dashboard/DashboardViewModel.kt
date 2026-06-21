@@ -93,6 +93,19 @@ class DashboardViewModel @Inject constructor(
 
             setState { copy(user = user, hasFullAccess = hasFullAccess) }
 
+            // Family members: attach a real-time Firestore mirror so any owner change (add / edit /
+            // delete / mark done / mark pending) lands in Room — and therefore on screen — instantly,
+            // with no manual refresh. Owners are skipped: they already see their own writes via the
+            // local Room cache, and re-pulling could clobber a not-yet-pushed local edit. The
+            // collection runs in viewModelScope, so the listeners detach automatically in onCleared.
+            if (!hasFullAccess && targetUserId.isNotEmpty()) {
+                viewModelScope.launch {
+                    syncRepository.observeOwnerRealtime(targetUserId)
+                        .catch { e -> SyncLogger.warn("Dashboard realtime mirror stopped", e) }
+                        .collect { /* Room flows below repaint on their own */ }
+                }
+            }
+
             // Seed the week immediately from the resolved owner profile so the UI doesn't flash 1/1.
             applyWeek(access.owner?.pregnancyStartDate, "seed")
 

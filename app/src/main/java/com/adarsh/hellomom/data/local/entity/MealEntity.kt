@@ -3,6 +3,7 @@ package com.adarsh.hellomom.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.adarsh.hellomom.data.local.SyncStatus
+import com.google.firebase.firestore.PropertyName
 
 @Entity(tableName = "meals")
 data class MealEntity(
@@ -14,11 +15,15 @@ data class MealEntity(
     val foodItems: String = "",
     val timing: String = "",
     val daysOfWeek: String = "", // comma-separated weekdays the meal is planned for, e.g. "Mon,Wed,Fri"
-    val isTaken: Boolean = false,
+    // Pin the Firestore field name so the "meal taken" flag round-trips to family devices
+    // (see DailyScheduleStatusEntity for why Kotlin's is-prefixed booleans need this).
+    @get:PropertyName("isTaken") @set:PropertyName("isTaken")
+    var isTaken: Boolean = false,
     val waterIntake: Int = 0,
 
     val syncStatus: SyncStatus = SyncStatus.PENDING,
     val updatedAt: Long = System.currentTimeMillis(),
     val lastSyncedAt: Long? = null,
-    val isDeleted: Boolean = false
+    @get:PropertyName("isDeleted") @set:PropertyName("isDeleted")
+    var isDeleted: Boolean = false
 )
