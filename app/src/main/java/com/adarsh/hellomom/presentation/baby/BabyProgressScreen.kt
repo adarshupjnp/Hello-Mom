@@ -457,6 +457,7 @@ private fun BabyProgressRing(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Bottom
         ) {
+            // The baby illustration and the fruit/seed "size" image side by side
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
@@ -485,12 +486,12 @@ private fun BabyProgressRing(
 
                 Spacer(Modifier.width(12.dp))
 
-                // The fruit/seed "size" image
+                // The dynamic fruit/seed image
                 Image(
                     painter = painterResource(id = babySizeRes),
                     contentDescription = "Size Item",
                     modifier = Modifier
-                        .size(90.dp)
+                        .size(110.dp) // Updated to match the baby image size as requested
                         .scale(pulse)
                         .graphicsLayer(alpha = 0.99f)
                         .drawWithContent {
