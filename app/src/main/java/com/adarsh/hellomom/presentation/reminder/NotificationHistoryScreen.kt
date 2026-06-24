@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.adarsh.hellomom.core.utils.ReminderDedup
 import com.adarsh.hellomom.data.local.entity.ReminderEntity
 import com.adarsh.hellomom.data.local.entity.ReminderStatus
 import com.adarsh.hellomom.presentation.components.DateFilterRow
@@ -34,7 +35,8 @@ fun NotificationHistoryScreen(
     // Requirement 1: Reminders should appear in history immediately.
     // Filter history based on selected date
     val history = remember(reminders, selectedDate) {
-        val all = reminders.sortedByDescending { it.time }
+        // De-duplicate (auto by title+date, custom by id) so the log never shows the same reminder twice.
+        val all = ReminderDedup.dedupe(reminders).sortedByDescending { it.time }
         if (selectedDate == null) {
             all
         } else {

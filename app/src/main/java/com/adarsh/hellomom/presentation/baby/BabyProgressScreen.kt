@@ -26,22 +26,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.MonitorWeight
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,6 +66,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.adarsh.hellomom.R
 import com.adarsh.hellomom.navigation.Screen
+import com.adarsh.hellomom.presentation.components.AiAssistantOverlay
+import com.adarsh.hellomom.presentation.components.AiAssistantProvider
+import com.adarsh.hellomom.presentation.components.AiProviderChooserDialog
 import com.adarsh.hellomom.presentation.components.AppBottomNavBar
 import com.adarsh.hellomom.presentation.components.AppTab
 import com.adarsh.hellomom.presentation.components.NAV_SELECTED_TAB_KEY
@@ -90,11 +92,32 @@ import kotlin.math.sin
 @Composable
 fun BabyProgressScreen(
     navController: NavController,
-    viewModel: BabyProgressViewModel = hiltViewModel()
+    viewModel: BabyProgressViewModel = hiltViewModel(),
+    voiceViewModel: com.adarsh.hellomom.presentation.voice.VoiceAssistantViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    var showAiChooser by remember { mutableStateOf(false) }
+    var aiProvider by remember { mutableStateOf<AiAssistantProvider?>(null) }
 
-    Scaffold(
+    // Voice assistant: show the mic only once content has loaded and no AI web chat is open.
+    LaunchedEffect(aiProvider, state.isLoading) {
+        voiceViewModel.sendIntent(com.adarsh.hellomom.presentation.voice.VoiceAssistantIntent.SetMicVisibility(aiProvider == null && !state.isLoading))
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            voiceViewModel.sendIntent(com.adarsh.hellomom.presentation.voice.VoiceAssistantIntent.SetMicVisibility(true))
+        }
+    }
+
+    if (showAiChooser) {
+        AiProviderChooserDialog(
+            onSelect = { showAiChooser = false; aiProvider = it },
+            onDismiss = { showAiChooser = false }
+        )
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
@@ -121,6 +144,19 @@ fun BabyProgressScreen(
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            // AI assistant launcher (same experience as the dashboard's "AI" button). Sits
+            // bottom-END, stacked vertically with the voice mic, so no two FABs ever overlap.
+            if (aiProvider == null && !state.isLoading) {
+                ExtendedFloatingActionButton(
+                    onClick = { showAiChooser = true },
+                    icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
+                    text = { Text("AI") },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            }
         }
     ) { padding ->
         Box(
@@ -228,6 +264,21 @@ fun BabyProgressScreen(
                     Spacer(Modifier.height(24.dp))
                 }
             }
+        }
+    }
+
+        // Full-screen AI chat overlay shown after a provider is chosen (hides the FAB above).
+        if (aiProvider != null) {
+            AiAssistantOverlay(
+                provider = aiProvider!!,
+                prompt = buildString {
+                    append("I am in week ${state.week}, day ${state.dayOfWeek} of pregnancy (trimester ${state.trimester}). ")
+                    if (state.weekData.babySize.isNotBlank()) append("My baby is about the size of a ${state.weekData.babySize}. ")
+                    if (state.weekData.weeklyMilestone.isNotBlank()) append("This week's milestone: ${state.weekData.weeklyMilestone}. ")
+                    append("Give me practical, week-specific guidance about my baby's growth and what to expect this week — development highlights, diet, and warning signs to watch for.")
+                },
+                onClose = { aiProvider = null }
+            )
         }
     }
 }

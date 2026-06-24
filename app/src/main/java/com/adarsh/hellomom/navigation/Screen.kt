@@ -17,9 +17,7 @@ sealed class Screen(val route: String) {
     object Chat : Screen("chat")
     object Symptom : Screen("symptom")
     object Reminders : Screen("reminders")
-    object RemindLater : Screen("remind_later/{reminder_id}") {
-        fun createRoute(id: Int) = "remind_later/$id"
-    }
+    object RemindLater : Screen("remind_later/{reminder_id}")
     object NotificationHistory : Screen("notification_history")
     object FamilyDashboard : Screen("family_dashboard")
     object Profile : Screen("profile")
@@ -37,7 +35,5 @@ sealed class Screen(val route: String) {
                 android.net.Uri.encode(url)
         }
     }
-    object Invite : Screen("invite/{code}") {
-        fun createRoute(code: String) = "invite/$code"
-    }
+    object Invite : Screen("invite/{code}")
 }

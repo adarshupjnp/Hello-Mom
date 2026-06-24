@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.adarsh.hellomom.presentation.components.LoadingButton
+import com.adarsh.hellomom.presentation.voice.rememberVoicePrefillStore
 import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -26,7 +27,16 @@ fun AddMedicineScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    
+
+    // Voice assistant prefill: arriving via an "add medicine" voice command fills the name/frequency.
+    val voicePrefill = rememberVoicePrefillStore()
+    LaunchedEffect(Unit) {
+        voicePrefill.consumeMedicine()?.let { p ->
+            p.name?.let { viewModel.sendIntent(AddMedicineIntent.OnNameChanged(it)) }
+            p.frequency?.let { viewModel.sendIntent(AddMedicineIntent.OnFrequencyChanged(it)) }
+        }
+    }
+
     val currentTime = java.util.Calendar.getInstance()
     val timePickerState = rememberTimePickerState(
         initialHour = currentTime.get(java.util.Calendar.HOUR_OF_DAY),

@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -44,6 +43,11 @@ import com.adarsh.hellomom.presentation.components.AppTab
 import com.adarsh.hellomom.presentation.components.NAV_SELECTED_TAB_KEY
 import com.adarsh.hellomom.presentation.components.AppFooter
 import com.adarsh.hellomom.presentation.components.ListShimmer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import com.adarsh.hellomom.data.local.SyncStatus
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -56,6 +60,7 @@ fun ProfileScreen(
     val state by viewModel.uiState.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -70,7 +75,6 @@ fun ProfileScreen(
         viewModel.effect.collect { effect ->
             when (effect) {
                 is ProfileEffect.NavigateToLogin -> {
-                    // Logout: clear the entire authenticated stack so back from Login exits the app.
                     navController.navigate(Screen.Login.route) {
                         popUpTo(0) { inclusive = true }
                         launchSingleTop = true
@@ -148,12 +152,10 @@ fun ProfileScreen(
             )
         },
         bottomBar = {
-            // Same bottom bar as the dashboard so Profile feels like a main section.
             AppBottomNavBar(
                 selectedTab = null,
                 onSelect = { tab ->
                     if (tab == AppTab.BABY) {
-                        // Baby Progress is its own full screen, like Profile.
                         navController.navigate(Screen.BabyProgress.route)
                     } else {
                         navigateToDashboardTab(navController, tab.ordinal)
@@ -176,7 +178,11 @@ fun ProfileScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         item {
-                            ProfileHeader(user) { imagePickerLauncher.launch("image/*") }
+                            ProfileHeader(
+                                user = user,
+                                onImageClick = { imagePickerLauncher.launch("image/*") },
+                                onEditClick = { showEditDialog = true }
+                            )
                         }
 
                         item {
@@ -204,16 +210,23 @@ fun ProfileScreen(
                 }
             }
 
-            // Modern full-screen "syncing" overlay shown during a manual sync.
             SyncingOverlay(visible = state.isSyncing)
+
+            if (showEditDialog && state.user != null) {
+                EditProfileDialog(
+                    user = state.user!!,
+                    isOwner = state.isOwner,
+                    onDismiss = { showEditDialog = false },
+                    onSave = { updated ->
+                        viewModel.sendIntent(ProfileIntent.UpdateProfile(updated))
+                        showEditDialog = false
+                    }
+                )
+            }
         }
     }
 }
 
-/**
- * Switch to a dashboard tab from the Profile screen: stamp the desired tab on the Home
- * back-stack entry and pop back to it (the dashboard observes this and selects the tab).
- */
 private fun navigateToDashboardTab(navController: NavController, tabIndex: Int) {
     runCatching {
         val homeEntry = navController.getBackStackEntry(Screen.Home.route)
@@ -248,7 +261,6 @@ fun SyncingOverlay(visible: Boolean) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Continuously rotating sync icon.
                     val transition = rememberInfiniteTransition(label = "sync")
                     val angle by transition.animateFloat(
                         initialValue = 0f,
@@ -293,30 +305,54 @@ fun SyncingOverlay(visible: Boolean) {
 }
 
 @Composable
-fun ProfileHeader(user: UserEntity, onImageClick: () -> Unit) {
+fun ProfileHeader(
+    user: UserEntity,
+    onImageClick: () -> Unit,
+    onEditClick: () -> Unit
+) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(120.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .clickable { onImageClick() },
-            contentAlignment = Alignment.Center
-        ) {
-            if (user.profilePicture != null) {
-                AsyncImage(
-                    model = user.profilePicture,
-                    contentDescription = "Profile",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                val initial = user.fullName.take(1).uppercase()
-                Text(
-                    text = initial,
-                    fontSize = 48.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+        Box(contentAlignment = Alignment.BottomEnd) {
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .clickable { onImageClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                if (user.profilePicture != null) {
+                    AsyncImage(
+                        model = user.profilePicture,
+                        contentDescription = "Profile",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    val initial = user.fullName.take(1).uppercase()
+                    Text(
+                        text = initial,
+                        fontSize = 48.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+            Surface(
+                modifier = Modifier
+                    .size(36.dp)
+                    .offset(x = (-4).dp, y = (-4).dp)
+                    .clip(CircleShape)
+                    .clickable { onEditClick() },
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                tonalElevation = 4.dp
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Edit Profile",
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .fillMaxSize()
                 )
             }
         }
@@ -328,7 +364,6 @@ fun ProfileHeader(user: UserEntity, onImageClick: () -> Unit) {
 
 @Composable
 fun UserInfoSection(user: UserEntity, isOwner: Boolean, week: Int, day: Int) {
-    val context = androidx.compose.ui.platform.LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp)
@@ -353,7 +388,6 @@ fun UserInfoSection(user: UserEntity, isOwner: Boolean, week: Int, day: Int) {
                 user.doctorName?.let { InfoRow(icon = Icons.Default.MedicalServices, label = "Doctor", value = "Dr. $it") }
                 user.hospitalName?.let { InfoRow(icon = Icons.Default.LocalHospital, label = "Hospital", value = it) }
             } else {
-                // Family view restricted info
                 user.emergencyContact?.let { InfoRow(icon = Icons.Default.Phone, label = "Emergency Contact", value = it) }
                 user.doctorName?.let { InfoRow(icon = Icons.Default.MedicalServices, label = "Doctor Info", value = "Dr. $it") }
             }
@@ -383,7 +417,7 @@ fun LanguageSettingsSection(
     voiceReminderEnabled: Boolean,
     onVoiceReminderChange: (Boolean) -> Unit
 ) {
-    val languages = listOf("English", "Hindi", "Gujarati", "Marathi")
+    val languages = listOf("Hindi", "Hinglish", "English", "Gujarati", "Marathi")
     var expanded by remember { mutableStateOf(false) }
 
     Card(
@@ -425,7 +459,6 @@ fun LanguageSettingsSection(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Voice reminder toggle — defaults ON, persists when turned off.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -511,4 +544,175 @@ fun SettingsItem(icon: ImageVector, title: String, onClick: () -> Unit = {}) {
         }
         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditProfileDialog(
+    user: UserEntity,
+    isOwner: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (UserEntity) -> Unit
+) {
+    var fullName by remember { mutableStateOf(user.fullName) }
+    var mobileNumber by remember { mutableStateOf(user.mobileNumber) }
+    var dob by remember { mutableLongStateOf(user.dob) }
+    var bloodGroup by remember { mutableStateOf(user.bloodGroup ?: "") }
+    var emergencyContact by remember { mutableStateOf(user.emergencyContact ?: "") }
+    var doctorName by remember { mutableStateOf(user.doctorName ?: "") }
+    var hospitalName by remember { mutableStateOf(user.hospitalName ?: "") }
+    var weight by remember { mutableStateOf(user.weight?.toString() ?: "") }
+    var height by remember { mutableStateOf(user.height?.toString() ?: "") }
+    
+    val pregnancyStartDate = user.pregnancyStartDate
+    val sdf = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
+
+    var showDobPicker by remember { mutableStateOf(false) }
+
+    if (showDobPicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = dob.takeIf { it > 0 } ?: System.currentTimeMillis())
+        DatePickerDialog(
+            onDismissRequest = { showDobPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { dob = it }
+                    showDobPicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDobPicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Profile") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = fullName,
+                    onValueChange = { fullName = it },
+                    label = { Text("Full Name") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = mobileNumber,
+                    onValueChange = { mobileNumber = it },
+                    label = { Text("Mobile Number") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                )
+
+                OutlinedTextField(
+                    value = if (dob > 0) sdf.format(Date(dob)) else "",
+                    onValueChange = {},
+                    label = { Text("Date of Birth") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showDobPicker = true },
+                    enabled = false,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+
+                if (isOwner && pregnancyStartDate != null) {
+                    OutlinedTextField(
+                        value = sdf.format(Date(pregnancyStartDate)),
+                        onValueChange = {},
+                        label = { Text("Pregnancy Start Date (Not Editable)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = false,
+                        supportingText = { Text("This date is used to track your pregnancy progress.") }
+                    )
+                }
+
+                OutlinedTextField(
+                    value = bloodGroup,
+                    onValueChange = { bloodGroup = it },
+                    label = { Text("Blood Group") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = emergencyContact,
+                    onValueChange = { emergencyContact = it },
+                    label = { Text("Emergency Contact") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                )
+
+                OutlinedTextField(
+                    value = doctorName,
+                    onValueChange = { doctorName = it },
+                    label = { Text("Doctor Name") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = hospitalName,
+                    onValueChange = { hospitalName = it },
+                    label = { Text("Hospital Name") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = weight,
+                        onValueChange = { weight = it },
+                        label = { Text("Weight (kg)") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+                    OutlinedTextField(
+                        value = height,
+                        onValueChange = { height = it },
+                        label = { Text("Height (cm)") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onSave(
+                        user.copy(
+                            fullName = fullName,
+                            mobileNumber = mobileNumber,
+                            dob = dob,
+                            bloodGroup = bloodGroup,
+                            emergencyContact = emergencyContact,
+                            doctorName = doctorName,
+                            hospitalName = hospitalName,
+                            weight = weight.toFloatOrNull(),
+                            height = height.toFloatOrNull(),
+                            syncStatus = SyncStatus.PENDING,
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                },
+                enabled = fullName.isNotBlank()
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

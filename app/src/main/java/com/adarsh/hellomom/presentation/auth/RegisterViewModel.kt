@@ -20,6 +20,7 @@ class RegisterViewModel @Inject constructor(
             is RegisterIntent.OnFullNameChanged -> setState { copy(fullName = intent.name) }
             is RegisterIntent.OnEmailChanged -> setState { copy(email = intent.email) }
             is RegisterIntent.OnPasswordChanged -> setState { copy(password = intent.password) }
+            is RegisterIntent.OnConfirmPasswordChanged -> setState { copy(confirmPassword = intent.confirmPassword) }
             is RegisterIntent.OnMobileChanged -> setState { copy(mobile = intent.mobile) }
             is RegisterIntent.OnDobChanged -> setState { copy(dob = intent.dob) }
             RegisterIntent.OnRegisterClicked -> register()
@@ -29,8 +30,8 @@ class RegisterViewModel @Inject constructor(
 
     private fun register() {
         viewModelScope.launch {
-            if (uiState.value.email.isEmpty() || uiState.value.password.isEmpty() || uiState.value.fullName.isEmpty()) {
-                setEffect { RegisterEffect.ShowError("Please fill all required fields") }
+            if (!uiState.value.isRegisterEnabled) {
+                setEffect { RegisterEffect.ShowError("Please fix the highlighted fields before continuing") }
                 return@launch
             }
 

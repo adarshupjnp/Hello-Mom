@@ -10,7 +10,9 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import android.content.Intent
 import com.adarsh.hellomom.data.worker.SyncWorker
+import com.adarsh.hellomom.notification.DayChangeReceiver
 import dagger.hilt.android.HiltAndroidApp
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -29,6 +31,19 @@ class HelloMomApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         scheduleBackgroundSync()
+        clearStaleNotificationsOnLaunch()
+    }
+
+    /**
+     * Catch-up for the day-change cleanup. [DayChangeReceiver] fires on the system's midnight
+     * DATE_CHANGED broadcast, but that can be missed if the device was off overnight, so we also
+     * run the same cleanup once on every launch. It is idempotent and only touches notifications /
+     * reminders from previous days, so it never clears anything still valid for today.
+     */
+    private fun clearStaleNotificationsOnLaunch() {
+        runCatching {
+            sendBroadcast(Intent(this, DayChangeReceiver::class.java))
+        }
     }
 
     /**

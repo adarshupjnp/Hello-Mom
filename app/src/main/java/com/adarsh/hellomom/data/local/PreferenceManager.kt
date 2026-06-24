@@ -17,8 +17,10 @@ class PreferenceManager @Inject constructor(
         private const val KEY_VOICE_ENABLED = "voice_enabled"
     }
 
+    // Default language is Hindi: the voice assistant (and TTS) speak Hindi until the user
+    // explicitly picks another language on the Login or Profile screen.
     var selectedLanguage: String
-        get() = prefs.getString(KEY_LANGUAGE, "English") ?: "English"
+        get() = prefs.getString(KEY_LANGUAGE, "Hindi") ?: "Hindi"
         set(value) = prefs.edit().putString(KEY_LANGUAGE, value).apply()
 
     var isVoiceEnabled: Boolean

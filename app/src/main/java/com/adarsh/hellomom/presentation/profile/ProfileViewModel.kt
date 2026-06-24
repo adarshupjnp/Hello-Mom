@@ -6,6 +6,7 @@ import com.adarsh.hellomom.core.RoleManager
 import com.adarsh.hellomom.core.utils.PregnancyProgress
 import com.adarsh.hellomom.core.utils.SyncLogger
 import com.adarsh.hellomom.data.local.PreferenceManager
+import com.adarsh.hellomom.data.local.entity.UserEntity
 import com.adarsh.hellomom.domain.repository.AppUpdateRepository
 import com.adarsh.hellomom.domain.repository.AuthRepository
 import com.adarsh.hellomom.domain.repository.SyncRepository
@@ -46,6 +47,13 @@ class ProfileViewModel @Inject constructor(
             ProfileIntent.Logout -> logout()
             ProfileIntent.SyncData -> syncData()
             ProfileIntent.ShareApp -> shareApp()
+            is ProfileIntent.UpdateProfile -> updateProfile(intent.updatedUser)
+        }
+    }
+
+    private fun updateProfile(updatedUser: UserEntity) {
+        viewModelScope.launch {
+            userRepository.updateUser(updatedUser)
         }
     }
 

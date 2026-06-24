@@ -13,6 +13,7 @@ sealed class ProfileIntent : UiIntent {
     object Logout : ProfileIntent()
     object SyncData : ProfileIntent()
     object ShareApp : ProfileIntent()
+    data class UpdateProfile(val updatedUser: UserEntity) : ProfileIntent()
 }
 
 data class ProfileState(

@@ -1,5 +1,6 @@
 package com.adarsh.hellomom.presentation.medicine
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -7,10 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,14 +39,17 @@ fun MedicineScreen(
     val context = LocalContext.current
     var editingMedicine by remember { mutableStateOf<MedicineEntity?>(null) }
     var deletingMedicine by remember { mutableStateOf<MedicineEntity?>(null) }
+    var detailedMedicine by remember { mutableStateOf<MedicineEntity?>(null) }
+    var pendingDownload by remember { mutableStateOf<MedicineEntity?>(null) }
 
     val pdfLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
         uri?.let {
-            val content = state.filteredMedicines.map {
+            val listToExport = if (pendingDownload != null) listOf(pendingDownload!!) else state.filteredMedicines
+            val content = listToExport.map {
                 PdfExporter.PdfRow(
-                    date = "Daily",
+                    date = if (pendingDownload != null) "Record" else "Daily",
                     description = it.name,
                     details = "${it.dosage} (${it.timing})"
                 )
@@ -56,12 +57,13 @@ fun MedicineScreen(
             PdfExporter.exportToPdf(
                 context = context,
                 uri = it,
-                title = "Medicine History Report",
+                title = if (pendingDownload != null) "Medicine Details" else "Medicine History Report",
                 userName = state.userName,
                 week = state.pregnancyWeek,
                 content = content
             )
         }
+        pendingDownload = null
     }
 
     LaunchedEffect(key1 = true) {
@@ -89,6 +91,7 @@ fun MedicineScreen(
                 },
                 actions = {
                     IconButton(onClick = { 
+                        pendingDownload = null
                         val date = SimpleDateFormat("yyyy_MM_dd", Locale.getDefault()).format(Date())
                         pdfLauncher.launch("Medicine_History_$date.pdf")
                     }) {
@@ -98,7 +101,6 @@ fun MedicineScreen(
             ) 
         },
         floatingActionButton = {
-            // Read-only family members cannot add medicines.
             if (state.isOwner) {
                 FloatingActionButton(onClick = { viewModel.sendIntent(MedicineIntent.OnAddMedicineClicked) }) {
                     Icon(Icons.Default.Add, contentDescription = "Add Medicine")
@@ -136,6 +138,12 @@ fun MedicineScreen(
                         MedicineItem(
                             medicine = medicine,
                             canEdit = state.isOwner,
+                            onOpen = { detailedMedicine = medicine },
+                            onShare = { shareMedicine(context, medicine) },
+                            onDownload = {
+                                pendingDownload = medicine
+                                pdfLauncher.launch("Medicine_${medicine.name.replace(" ", "_")}.pdf")
+                            },
                             onDelete = { deletingMedicine = medicine },
                             onEdit = { editingMedicine = medicine },
                             onToggle = { viewModel.sendIntent(MedicineIntent.OnToggleMedicineStatus(medicine)) }
@@ -159,6 +167,27 @@ fun MedicineScreen(
         )
     }
 
+    detailedMedicine?.let { medicine ->
+        AlertDialog(
+            onDismissRequest = { detailedMedicine = null },
+            title = { Text(medicine.name) },
+            text = {
+                Column {
+                    Text("Dosage: ${medicine.dosage}")
+                    Text("Timing: ${medicine.timing}")
+                    Text("Relation to meal: ${medicine.beforeAfterMeal}")
+                    if (!medicine.notes.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Notes: ${medicine.notes}")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { detailedMedicine = null }) { Text("Close") }
+            }
+        )
+    }
+
     deletingMedicine?.let { medicine ->
         AlertDialog(
             onDismissRequest = { deletingMedicine = null },
@@ -175,6 +204,16 @@ fun MedicineScreen(
             }
         )
     }
+}
+
+private fun shareMedicine(context: android.content.Context, medicine: MedicineEntity) {
+    val text = "Medicine: ${medicine.name}\nDosage: ${medicine.dosage}\nTiming: ${medicine.timing}\n${medicine.beforeAfterMeal}"
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, "Medicine Details")
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(Intent.createChooser(intent, "Share Medicine"))
 }
 
 @Composable
@@ -252,10 +291,15 @@ fun EditMedicineDialog(
 fun MedicineItem(
     medicine: MedicineEntity,
     canEdit: Boolean,
+    onOpen: () -> Unit,
+    onShare: () -> Unit,
+    onDownload: () -> Unit,
     onDelete: () -> Unit,
     onEdit: () -> Unit,
     onToggle: () -> Unit
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -265,7 +309,6 @@ fun MedicineItem(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // The "taken" checkbox is a write action, so it is disabled for family members.
             Checkbox(
                 checked = medicine.isCompleted,
                 onCheckedChange = { onToggle() },
@@ -278,24 +321,40 @@ fun MedicineItem(
                 Text(text = medicine.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                 Text(text = "${medicine.dosage} - ${medicine.timing}", style = MaterialTheme.typography.bodyMedium)
                 Text(text = medicine.beforeAfterMeal, style = MaterialTheme.typography.bodySmall)
-                if (medicine.daysOfWeek.isNotBlank()) {
-                    val days = medicine.daysOfWeek.split(",")
-                    Text(
-                        text = if (days.size == 7) "Every day" else days.joinToString(", "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
             }
 
-            // Edit / delete controls are hidden for read-only family members.
-            if (canEdit) {
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary)
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "More")
                 }
-
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Open") },
+                        leadingIcon = { Icon(Icons.Default.Visibility, contentDescription = null) },
+                        onClick = { menuExpanded = false; onOpen() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Download") },
+                        leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
+                        onClick = { menuExpanded = false; onDownload() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Share") },
+                        leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                        onClick = { menuExpanded = false; onShare() }
+                    )
+                    if (canEdit) {
+                        DropdownMenuItem(
+                            text = { Text("Edit") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = { menuExpanded = false; onEdit() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete") },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = { menuExpanded = false; onDelete() }
+                        )
+                    }
                 }
             }
         }

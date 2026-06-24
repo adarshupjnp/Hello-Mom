@@ -29,6 +29,8 @@ import com.adarsh.hellomom.data.local.entity.SymptomLogEntity
 import com.adarsh.hellomom.data.local.entity.UserEntity
 import com.adarsh.hellomom.data.local.entity.WaterIntakeEntity
 import com.adarsh.hellomom.core.utils.SyncLogger
+import com.adarsh.hellomom.core.constants.ReminderConstants
+import com.adarsh.hellomom.domain.repository.ReminderRepository
 import com.adarsh.hellomom.domain.repository.SyncRepository
 import com.adarsh.hellomom.notification.AppointmentReminderScheduler
 import com.adarsh.hellomom.notification.ReminderManager
@@ -45,6 +47,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import java.util.Calendar
 import javax.inject.Inject
 
 class SyncRepositoryImpl @Inject constructor(
@@ -64,7 +67,8 @@ class SyncRepositoryImpl @Inject constructor(
     private val journalDao: JournalDao,
     private val dailyScheduleStatusDao: DailyScheduleStatusDao,
     private val reminderManager: ReminderManager,
-    private val appointmentReminderScheduler: AppointmentReminderScheduler
+    private val appointmentReminderScheduler: AppointmentReminderScheduler,
+    private val reminderRepository: ReminderRepository
 ) : SyncRepository {
 
     // Serialises concurrent syncAll() calls (screen loads + WorkManager can overlap) and lets
@@ -130,6 +134,20 @@ class SyncRepositoryImpl @Inject constructor(
             SyncLogger.info("syncAll user='${self.fullName}' isOwner=$isOwner startDate=${self.pregnancyStartDate} storedLink=${self.linkedPrimaryUserId}")
 
             if (isOwner) {
+                // Owner is the single writer for the daily reminder lifecycle. Runs on every sync
+                // (app launch, the 15-min periodic SyncWorker, and each screen navigation), so today's
+                // reminders exist and stale (>retention) ones are purged even if the owner never opens
+                // the Reminder screen. ensureDailyReminders is idempotent; the purge deletes from
+                // Firestore too, so family devices drop the same rows on their next pull.
+                runCatching { reminderRepository.ensureDailyReminders(uid, self.fullName) }
+                    .onFailure { SyncLogger.warn("syncAll: ensureDailyReminders failed", it) }
+                // Owner-only one-time cleanup of legacy duplicate reminder rows (Room + Firestore);
+                // family devices drop them on their next pull. Idempotent — a no-op once clean.
+                runCatching { reminderRepository.purgeDuplicateReminders(uid, deleteRemote = true) }
+                    .onFailure { SyncLogger.warn("syncAll: reminder dedup failed", it) }
+                runCatching { reminderRepository.deleteOldReminders(reminderRetentionCutoff(), deleteRemote = true) }
+                    .onFailure { SyncLogger.warn("syncAll: reminder purge failed", it) }
+
                 // Owner: push anything that hasn't reached Firestore yet so family sees it,
                 // then pull back (covers edits made on another device).
                 pushPendingData(uid)
@@ -550,6 +568,18 @@ class SyncRepositoryImpl @Inject constructor(
         }.onFailure { SyncLogger.warn("push symptoms failed", it) }
         SyncLogger.info("pushPendingData DONE uid=$uid")
     }
+
+    /**
+     * Start-of-day millis for the oldest day to keep: today minus (RETENTION_DAYS - 1), i.e. the
+     * last 7 days inclusive of today. Reminders whose time falls before this are purged.
+     */
+    private fun reminderRetentionCutoff(): Long = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+        add(Calendar.DAY_OF_YEAR, -(ReminderConstants.RETENTION_DAYS - 1))
+    }.timeInMillis
 
     /** Locate the pregnancy owner by the hardcoded name convention (adarsh / riya). */
     private suspend fun findOwnerId(): String? = runCatching {

@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Notifications
@@ -41,6 +42,7 @@ fun ReminderListScreen(
     var showTimePicker by remember { mutableStateOf(false) }
 
     var showSnoozeOptions by remember { mutableStateOf<ReminderEntity?>(null) }
+    var deletingReminder by remember { mutableStateOf<ReminderEntity?>(null) }
 
     if (showSnoozeOptions != null) {
         val snoozeTimes = listOf(5, 10, 15, 30, 60)
@@ -100,10 +102,32 @@ fun ReminderListScreen(
         )
     }
 
+    deletingReminder?.let { reminder ->
+        AlertDialog(
+            onDismissRequest = { deletingReminder = null },
+            title = { Text("Delete Reminder") },
+            text = { Text("Are you sure you want to delete \"${reminder.title}\"?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteReminder(reminder)
+                    deletingReminder = null
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deletingReminder = null }) { Text("Cancel") }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Family Reminder Dashboard", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
                 actions = {
                     IconButton(onClick = { navController.navigate("notification_history") }) {
                         Icon(Icons.Default.Notifications, contentDescription = "History")
@@ -166,7 +190,7 @@ fun ReminderListScreen(
                         isOwner = isOwner,
                         onDone = { viewModel.markAsDone(reminder.id) },
                         onSnooze = { showSnoozeOptions = reminder },
-                        onDelete = { viewModel.deleteReminder(reminder) },
+                        onDelete = { deletingReminder = reminder },
                         onEditTime = {
                             selectedReminderForTime = reminder
                             showTimePicker = true
@@ -236,8 +260,13 @@ fun ReminderCard(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Alarm Style Time Display
-            Row(
+            // Alarm Style Date + Time Display
+            val sdf = SimpleDateFormat("hh:mm", Locale.getDefault())
+            val amPmSdf = SimpleDateFormat("a", Locale.getDefault())
+            val dateSdf = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault())
+            val time = Date(reminder.time)
+
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { if (isOwner && (reminder.status == ReminderStatus.PENDING || reminder.status == ReminderStatus.SNOOZED)) onEditTime() }
@@ -246,27 +275,34 @@ fun ReminderCard(
                         shape = RoundedCornerShape(12.dp)
                     )
                     .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                val sdf = SimpleDateFormat("hh:mm", Locale.getDefault())
-                val amPmSdf = SimpleDateFormat("a", Locale.getDefault())
-                val time = Date(reminder.time)
-                
                 Text(
-                    text = sdf.format(time),
-                    fontSize = 48.sp,
-                    fontWeight = FontWeight.Black,
+                    text = dateSdf.format(time),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = amPmSdf.format(time),
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 16.dp)
-                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = sdf.format(time),
+                        fontSize = 48.sp,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = amPmSdf.format(time),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 16.dp)
+                    )
+                }
             }
             
             Spacer(modifier = Modifier.height(16.dp))

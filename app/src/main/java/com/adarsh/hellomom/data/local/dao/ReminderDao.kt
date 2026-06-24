@@ -2,7 +2,6 @@ package com.adarsh.hellomom.data.local.dao
 
 import androidx.room.*
 import com.adarsh.hellomom.data.local.entity.ReminderEntity
-import com.adarsh.hellomom.data.local.entity.ReminderStatus
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -12,9 +11,6 @@ interface ReminderDao {
 
     @Query("SELECT * FROM reminders WHERE id = :id")
     suspend fun getReminderById(id: Int): ReminderEntity?
-
-    @Query("SELECT * FROM reminders WHERE status = :status")
-    fun getRemindersByStatus(status: ReminderStatus): Flow<List<ReminderEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertReminder(reminder: ReminderEntity): Long
@@ -33,6 +29,11 @@ interface ReminderDao {
 
     @Query("SELECT COUNT(*) FROM reminders WHERE status = 'PENDING' AND time <= :currentTime")
     suspend fun getActiveNotificationCount(currentTime: Long): Int
+
+    // Reminders that were due before [startOfDay] (i.e. on a previous day) and were never acted on
+    // by the user — still PENDING or SNOOZED. Used by the day-change cleanup to auto-expire them.
+    @Query("SELECT * FROM reminders WHERE time < :startOfDay AND status IN ('PENDING', 'SNOOZED')")
+    suspend fun getStalePendingBefore(startOfDay: Long): List<ReminderEntity>
 
     @Query("SELECT * FROM reminders WHERE userId = :userId AND title = :title AND date = :date AND time = :time LIMIT 1")
     suspend fun getExistingReminder(userId: String, title: String, date: String, time: Long): ReminderEntity?
@@ -53,4 +54,8 @@ interface ReminderDao {
 
     @Query("DELETE FROM reminders WHERE userId = :userId AND synced = 1 AND id NOT IN (:keepIds)")
     suspend fun deleteRemindersNotIn(userId: String, keepIds: List<Int>)
+
+    /** All of a user's reminders as a one-shot list (used by the duplicate cleanup). */
+    @Query("SELECT * FROM reminders WHERE userId = :userId")
+    suspend fun getRemindersForUser(userId: String): List<ReminderEntity>
 }

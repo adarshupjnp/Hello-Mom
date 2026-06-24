@@ -106,7 +106,8 @@ private fun buildAiHealthPrompt(state: DashboardState, language: String): String
 @Composable
 fun DashboardScreen(
     navController: NavController,
-    viewModel: DashboardViewModel = hiltViewModel()
+    viewModel: DashboardViewModel = hiltViewModel(),
+    voiceViewModel: com.adarsh.hellomom.presentation.voice.VoiceAssistantViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
     val isOnline by rememberIsOnline()
@@ -129,6 +130,21 @@ fun DashboardScreen(
     // AI assistant in-app browser state.
     var aiProvider by remember { mutableStateOf<AiProvider?>(null) }
     var showAiChooser by remember { mutableStateOf(false) }
+
+    // Voice assistant: show the mic only once the dashboard has finished loading (shimmer gone) and
+    // no AI web chat is open. The welcome greeting fires when the mic first appears, so it always
+    // starts after loading — never over the shimmer.
+    LaunchedEffect(aiProvider, state.isLoading) {
+        voiceViewModel.sendIntent(com.adarsh.hellomom.presentation.voice.VoiceAssistantIntent.SetMicVisibility(aiProvider == null && !state.isLoading))
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            voiceViewModel.sendIntent(com.adarsh.hellomom.presentation.voice.VoiceAssistantIntent.SetMicVisibility(true))
+        }
+    }
+
+    // The welcome greeting is triggered by VoiceAssistantOverlay (the Activity-scoped instance that
+    // drives the floating mic) so the mic shows "active" while it speaks and listens right after.
 
     // Read the current app language preference live so the AI prompt always reflects
     // the latest choice the user made in Profile/Settings.
@@ -634,194 +650,6 @@ private fun SectionHeader(icon: ImageVector, title: String) {
     }
 }
 
-/**
- * Motivation card. Shows a default weekly message and is ready for future
- * dynamic quotes — callers can pass [message] to override it.
- */
-@Composable
-private fun MotivationCard(
-    message: String = "Start a new week with a healthy body and positive mindset for your baby's growth."
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(elevation = 8.dp, shape = RoundedCornerShape(24.dp)),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-    ) {
-        Box(
-            modifier = Modifier.background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f)
-                    )
-                )
-            )
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    Icons.Default.Spa,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.SemiBold,
-                    lineHeight = 26.sp
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun SyncStatusBanner(
-    isSyncing: Boolean,
-    syncFailed: Boolean,
-    lastSyncTime: Long?,
-    onSyncClick: () -> Unit
-) {
-    val sdf = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
-    
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = when {
-                syncFailed -> MaterialTheme.colorScheme.errorContainer
-                isSyncing -> MaterialTheme.colorScheme.primaryContainer
-                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            }
-        ),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = when {
-                            syncFailed -> Icons.Default.Warning
-                            isSyncing -> Icons.Default.Sync
-                            else -> Icons.Default.CheckCircle
-                        },
-                        contentDescription = null,
-                        tint = when {
-                            syncFailed -> MaterialTheme.colorScheme.error
-                            isSyncing -> MaterialTheme.colorScheme.primary
-                            else -> Color(0xFF4CAF50)
-                        }
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = when {
-                                syncFailed -> "Sync Required"
-                                isSyncing -> "Syncing Data..."
-                                else -> "✓ Synced"
-                            },
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        if (lastSyncTime != null) {
-                            Text(
-                                text = "Last Sync: ${sdf.format(Date(lastSyncTime))}",
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    }
-                }
-                
-                if (syncFailed || !isSyncing) {
-                    TextButton(onClick = onSyncClick) {
-                        Text(if (syncFailed) "Retry Sync" else "Sync Now")
-                    }
-                } else {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                }
-            }
-            
-            if (syncFailed) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Latest reminder data is not fully synchronized. Please sync your data to view and track the most recent reminders.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun ExpandableQuickActions(navController: NavController) {
-    var expanded by remember { mutableStateOf(false) }
-    
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                shape = RoundedCornerShape(24.dp)
-            )
-            .padding(16.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded },
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.Widgets,
-                    contentDescription = null, 
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "Quick Actions", 
-                    fontWeight = FontWeight.Bold, 
-                    style = MaterialTheme.typography.titleLarge
-                )
-            }
-            Icon(
-                imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                contentDescription = if (expanded) "Collapse" else "Expand",
-                tint = MaterialTheme.colorScheme.secondary
-            )
-        }
-        
-        AnimatedVisibility(
-            visible = expanded,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
-        ) {
-            Column {
-                Spacer(modifier = Modifier.height(16.dp))
-                QuickActionsGrid(navController)
-            }
-        }
-    }
-}
-
 @Composable
 fun QuickActionsGrid(navController: NavController) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -925,34 +753,6 @@ fun ActionCard(title: String, icon: ImageVector, modifier: Modifier = Modifier, 
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
-        }
-    }
-}
-
-@Composable
-fun MotherBodyChangesCard(week: Int) {
-    val changeText = PregnancyDataEngine.getMotherBodyChanges(week)
-
-    Card(
-        modifier = Modifier.fillMaxWidth().shadow(elevation = 4.dp, shape = RoundedCornerShape(24.dp)),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBG)
-    ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.AccessibilityNew, 
-                contentDescription = null, 
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(40.dp)
-            )
-            Spacer(modifier = Modifier.width(20.dp))
-            Column {
-                Text(text = "Your Body This Week", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                Text(text = changeText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
         }
     }
 }

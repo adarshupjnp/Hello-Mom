@@ -2,15 +2,24 @@ package com.adarsh.hellomom.presentation.auth
 
 import androidx.lifecycle.viewModelScope
 import com.adarsh.hellomom.core.BaseViewModel
+import com.adarsh.hellomom.data.local.entity.UserEntity
 import com.adarsh.hellomom.domain.repository.AuthRepository
+import com.adarsh.hellomom.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class LoginViewModel @Inject constructor(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val userRepository: UserRepository
 ) : BaseViewModel<LoginIntent, LoginState, LoginEffect>() {
+
+    /**
+     * The Google-authenticated user awaiting a WhatsApp number. Held while the mandatory prompt is
+     * shown so we can save the number against the right account and then route the user onward.
+     */
+    private var pendingGoogleUser: UserEntity? = null
 
     override fun createInitialState(): LoginState = LoginState()
 
@@ -31,6 +40,7 @@ class LoginViewModel @Inject constructor(
             LoginIntent.OnForgotPasswordClicked -> setEffect { LoginEffect.NavigateToForgotPassword }
             is LoginIntent.OnResetPassword -> resetPassword(intent.email)
             LoginIntent.OnRegisterClicked -> setEffect { LoginEffect.NavigateToRegister }
+            is LoginIntent.OnWhatsAppNumberSubmitted -> submitWhatsAppNumber(intent.number)
         }
     }
 
@@ -81,17 +91,51 @@ class LoginViewModel @Inject constructor(
             setState { copy(isLoading = true, error = null) }
             val result = authRepository.loginWithGoogle(idToken)
             result.onSuccess { user ->
-                val isOwner = com.adarsh.hellomom.core.RoleManager.isOwnerUser(user.fullName, user.email)
-
-                if (isOwner && user.pregnancyStartDate == null) {
-                    setEffect { LoginEffect.NavigateToProfileCreation }
+                // Google accounts never carry a phone number, so first-time Google users land here
+                // without one. Block onward navigation until they provide a WhatsApp number; returning
+                // users whose number is already on file skip the prompt entirely.
+                if (user.mobileNumber.isBlank()) {
+                    pendingGoogleUser = user
+                    setState { copy(isLoading = false, requiresWhatsAppNumber = true) }
                 } else {
-                    setEffect { LoginEffect.NavigateToHome }
+                    navigateAfterAuth(user)
                 }
             }.onFailure { e ->
                 setState { copy(isLoading = false, error = e.message) }
                 setEffect { LoginEffect.ShowError(e.message ?: "Google Login failed") }
             }
+        }
+    }
+
+    private fun submitWhatsAppNumber(number: String) {
+        val user = pendingGoogleUser ?: return
+        if (!uiState.value.isWhatsAppNumberValid(number)) {
+            setEffect { LoginEffect.ShowError("Enter a valid ${LoginState.WHATSAPP_NUMBER_LENGTH}-digit WhatsApp number") }
+            return
+        }
+        viewModelScope.launch {
+            setState { copy(isLoading = true, error = null) }
+            val updatedUser = user.copy(mobileNumber = number)
+            userRepository.updateUser(updatedUser)
+                .onSuccess {
+                    pendingGoogleUser = null
+                    setState { copy(isLoading = false, requiresWhatsAppNumber = false) }
+                    navigateAfterAuth(updatedUser)
+                }
+                .onFailure { e ->
+                    setState { copy(isLoading = false, error = e.message) }
+                    setEffect { LoginEffect.ShowError(e.message ?: "Failed to save WhatsApp number") }
+                }
+        }
+    }
+
+    /** Routes a freshly authenticated [user] to onboarding (owner, no pregnancy date) or Home. */
+    private fun navigateAfterAuth(user: UserEntity) {
+        val isOwner = com.adarsh.hellomom.core.RoleManager.isOwnerUser(user.fullName, user.email)
+        if (isOwner && user.pregnancyStartDate == null) {
+            setEffect { LoginEffect.NavigateToProfileCreation }
+        } else {
+            setEffect { LoginEffect.NavigateToHome }
         }
     }
 }

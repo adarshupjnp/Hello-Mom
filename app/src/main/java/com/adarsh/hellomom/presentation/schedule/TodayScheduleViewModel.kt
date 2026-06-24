@@ -3,6 +3,7 @@ package com.adarsh.hellomom.presentation.schedule
 import androidx.lifecycle.viewModelScope
 import com.adarsh.hellomom.core.BaseViewModel
 import com.adarsh.hellomom.core.RoleManager
+import com.adarsh.hellomom.core.utils.ReminderDedup
 import com.adarsh.hellomom.core.utils.SyncLogger
 import com.adarsh.hellomom.data.local.SyncStatus
 import com.adarsh.hellomom.data.local.entity.DailyScheduleStatusEntity
@@ -198,8 +199,9 @@ class TodayScheduleViewModel @Inject constructor(
             )
         }
 
-        // Add Reminders (Coconut Water, Lunch meal, evening meal, dinner, etc.)
-        reminders.forEach { r ->
+        // Add Reminders (Coconut Water, Lunch meal, evening meal, dinner, etc.), de-duplicated so a
+        // duplicate auto-reminder row never shows as two schedule items.
+        ReminderDedup.dedupe(reminders).forEach { r ->
             val displayTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(r.time))
             items += ScheduleItem(
                 refId = r.id.toString(),

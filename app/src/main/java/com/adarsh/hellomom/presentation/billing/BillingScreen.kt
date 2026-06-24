@@ -1,5 +1,6 @@
 package com.adarsh.hellomom.presentation.billing
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -7,11 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +21,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.adarsh.hellomom.core.utils.PdfExporter
+import com.adarsh.hellomom.core.voice.VoiceIntentType
+import com.adarsh.hellomom.presentation.voice.rememberVoicePrefillStore
 import com.adarsh.hellomom.data.local.entity.BillingEntity
 import com.adarsh.hellomom.presentation.components.AppFooter
 import com.adarsh.hellomom.presentation.components.DateFilterRow
@@ -40,6 +40,13 @@ fun BillingScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var editingBill by remember { mutableStateOf<BillingEntity?>(null) }
     var deletingBill by remember { mutableStateOf<BillingEntity?>(null) }
+    var detailedBill by remember { mutableStateOf<BillingEntity?>(null) }
+    var pendingDownload by remember { mutableStateOf<BillingEntity?>(null) }
+
+    val voicePrefill = rememberVoicePrefillStore()
+    LaunchedEffect(Unit) {
+        if (voicePrefill.consumeAutoOpenAdd(VoiceIntentType.BILLING)) showAddDialog = true
+    }
     val context = LocalContext.current
     val sdf = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
 
@@ -47,7 +54,8 @@ fun BillingScreen(
         contract = ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
         uri?.let {
-            val content = state.filteredBills.map {
+            val listToExport = if (pendingDownload != null) listOf(pendingDownload!!) else state.filteredBills
+            val content = listToExport.map {
                 PdfExporter.PdfRow(
                     date = sdf.format(Date(it.date)),
                     description = it.title,
@@ -57,12 +65,13 @@ fun BillingScreen(
             PdfExporter.exportToPdf(
                 context = context,
                 uri = it,
-                title = "Billing & Expenses Report",
+                title = if (pendingDownload != null) "Expense Details" else "Billing & Expenses Report",
                 userName = state.userName,
                 week = state.pregnancyWeek,
                 content = content
             )
         }
+        pendingDownload = null
     }
 
     if (showAddDialog) {
@@ -90,6 +99,23 @@ fun BillingScreen(
         )
     }
 
+    detailedBill?.let { bill ->
+        AlertDialog(
+            onDismissRequest = { detailedBill = null },
+            title = { Text(bill.title) },
+            text = {
+                Column {
+                    Text("Amount: ₹${bill.amount}")
+                    Text("Category: ${bill.category}")
+                    Text("Date: ${sdf.format(Date(bill.date))}")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { detailedBill = null }) { Text("Close") }
+            }
+        )
+    }
+
     deletingBill?.let { bill ->
         AlertDialog(
             onDismissRequest = { deletingBill = null },
@@ -113,11 +139,12 @@ fun BillingScreen(
                 title = { Text("Billing & Expenses") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
                     IconButton(onClick = { 
+                        pendingDownload = null
                         val date = SimpleDateFormat("yyyy_MM_dd", Locale.getDefault()).format(Date())
                         pdfLauncher.launch("Billing_Report_$date.pdf")
                     }) {
@@ -127,7 +154,6 @@ fun BillingScreen(
             ) 
         },
         floatingActionButton = {
-            // Read-only family members cannot add expenses.
             if (state.isOwner) {
                 FloatingActionButton(onClick = { showAddDialog = true }) {
                     Icon(Icons.Default.Add, contentDescription = "Add Bill")
@@ -157,7 +183,6 @@ fun BillingScreen(
             Spacer(modifier = Modifier.height(8.dp))
             
             if (state.isLoading) {
-                // Family members load the owner's bills over the network — shimmer until they arrive.
                 ListShimmer(modifier = Modifier.weight(1f))
             } else if (state.filteredBills.isEmpty()) {
                 Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
@@ -172,6 +197,12 @@ fun BillingScreen(
                         BillItem(
                             bill = bill,
                             isOwner = state.isOwner,
+                            onOpen = { detailedBill = bill },
+                            onShare = { shareBill(context, bill, sdf) },
+                            onDownload = {
+                                pendingDownload = bill
+                                pdfLauncher.launch("Expense_${bill.title.replace(" ", "_")}.pdf")
+                            },
                             onEdit = { editingBill = bill },
                             onDelete = { deletingBill = bill }
                         )
@@ -182,6 +213,16 @@ fun BillingScreen(
             }
         }
     }
+}
+
+private fun shareBill(context: android.content.Context, bill: BillingEntity, sdf: SimpleDateFormat) {
+    val text = "Expense: ${bill.title}\nAmount: ₹${bill.amount}\nCategory: ${bill.category}\nDate: ${sdf.format(Date(bill.date))}"
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, "Expense Details")
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(Intent.createChooser(intent, "Share Expense"))
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -291,37 +332,69 @@ fun TotalExpenseCard(total: Double) {
 
 
 @Composable
-fun BillItem(bill: BillingEntity, isOwner: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
+fun BillItem(
+    bill: BillingEntity, 
+    isOwner: Boolean, 
+    onOpen: () -> Unit,
+    onShare: () -> Unit,
+    onDownload: () -> Unit,
+    onEdit: () -> Unit, 
+    onDelete: () -> Unit
+) {
     val sdf = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(start = 16.dp).fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f).padding(vertical = 16.dp)) {
                 Text(text = bill.title, fontWeight = FontWeight.Bold)
                 Text(text = bill.category, style = MaterialTheme.typography.bodySmall)
                 Text(text = sdf.format(Date(bill.date)), style = MaterialTheme.typography.bodySmall)
+                Text(
+                    text = "₹${bill.amount}",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
             }
-            Text(
-                text = "₹${bill.amount}",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.error,
-                modifier = if (isOwner) Modifier else Modifier.padding(end = 16.dp)
-            )
-            // Edit / delete controls are hidden for read-only family members.
-            if (isOwner) {
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary)
+
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "More")
                 }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Open") },
+                        leadingIcon = { Icon(Icons.Default.Visibility, contentDescription = null) },
+                        onClick = { menuExpanded = false; onOpen() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Download") },
+                        leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
+                        onClick = { menuExpanded = false; onDownload() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Share") },
+                        leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                        onClick = { menuExpanded = false; onShare() }
+                    )
+                    if (isOwner) {
+                        DropdownMenuItem(
+                            text = { Text("Edit") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = { menuExpanded = false; onEdit() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete") },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = { menuExpanded = false; onDelete() }
+                        )
+                    }
                 }
             }
         }
     }
 }
-
-

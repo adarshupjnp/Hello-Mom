@@ -1,5 +1,6 @@
 package com.adarsh.hellomom.presentation.food
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -9,13 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,6 +22,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.adarsh.hellomom.core.utils.PdfExporter
+import com.adarsh.hellomom.core.voice.VoiceIntentType
+import com.adarsh.hellomom.presentation.voice.rememberVoicePrefillStore
 import com.adarsh.hellomom.data.local.entity.MealEntity
 import com.adarsh.hellomom.data.local.entity.WaterIntakeEntity
 import com.adarsh.hellomom.presentation.components.AppFooter
@@ -45,6 +42,13 @@ fun FoodScreen(
     var showAddMealDialog by remember { mutableStateOf(false) }
     var editingMeal by remember { mutableStateOf<MealEntity?>(null) }
     var deletingMeal by remember { mutableStateOf<MealEntity?>(null) }
+    var detailedMeal by remember { mutableStateOf<MealEntity?>(null) }
+    var pendingDownload by remember { mutableStateOf<MealEntity?>(null) }
+
+    val voicePrefill = rememberVoicePrefillStore()
+    LaunchedEffect(Unit) {
+        if (voicePrefill.consumeAutoOpenAdd(VoiceIntentType.FOOD)) showAddMealDialog = true
+    }
     val context = LocalContext.current
 
     val pdfLauncher = rememberLauncherForActivityResult(
@@ -53,31 +57,40 @@ fun FoodScreen(
         uri?.let {
             val content = mutableListOf<PdfExporter.PdfRow>()
             
-            // Add Water Info
-            content.add(PdfExporter.PdfRow(
-                date = "Today",
-                description = "Water Intake",
-                details = "${state.waterIntake?.glassesDrank ?: 0} Glasses"
-            ))
-
-            // Add Meals
-            state.filteredMeals.forEach {
+            if (pendingDownload == null) {
+                // Export full report including water
                 content.add(PdfExporter.PdfRow(
-                    date = it.timing,
-                    description = it.mealType,
-                    details = it.foodItems
+                    date = "Today",
+                    description = "Water Intake",
+                    details = "${state.waterIntake?.glassesDrank ?: 0} Glasses"
+                ))
+
+                state.filteredMeals.forEach {
+                    content.add(PdfExporter.PdfRow(
+                        date = it.timing,
+                        description = it.mealType,
+                        details = it.foodItems
+                    ))
+                }
+            } else {
+                // Export single meal
+                content.add(PdfExporter.PdfRow(
+                    date = pendingDownload!!.timing,
+                    description = pendingDownload!!.mealType,
+                    details = pendingDownload!!.foodItems
                 ))
             }
 
             PdfExporter.exportToPdf(
                 context = context,
                 uri = it,
-                title = "Nutrition & Water Report",
+                title = if (pendingDownload != null) "Meal Details" else "Nutrition & Water Report",
                 userName = state.userName,
                 week = state.pregnancyWeek,
                 content = content
             )
         }
+        pendingDownload = null
     }
 
     if (showAddMealDialog) {
@@ -97,6 +110,25 @@ fun FoodScreen(
             onSave = { updated ->
                 viewModel.sendIntent(FoodIntent.OnUpdateMeal(updated))
                 editingMeal = null
+            }
+        )
+    }
+
+    detailedMeal?.let { meal ->
+        AlertDialog(
+            onDismissRequest = { detailedMeal = null },
+            title = { Text(meal.mealType) },
+            text = {
+                Column {
+                    Text("Food Items: ${meal.foodItems}")
+                    Text("Timing: ${meal.timing}")
+                    if (meal.daysOfWeek.isNotBlank()) {
+                        Text("Days: ${meal.daysOfWeek}")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { detailedMeal = null }) { Text("Close") }
             }
         )
     }
@@ -129,12 +161,12 @@ fun FoodScreen(
                 },
                 actions = {
                     IconButton(onClick = {
+                        pendingDownload = null
                         val date = SimpleDateFormat("yyyy_MM_dd", Locale.getDefault()).format(Date())
                         pdfLauncher.launch("Nutrition_Report_$date.pdf")
                     }) {
                         Icon(Icons.Default.PictureAsPdf, contentDescription = "Export PDF")
                     }
-                    // Read-only family members cannot add meals.
                     if (state.isOwner) {
                         IconButton(onClick = { showAddMealDialog = true }) {
                             Icon(Icons.Default.Add, contentDescription = "Add Meal")
@@ -144,8 +176,6 @@ fun FoodScreen(
             ) 
         }
     ) { paddingValues ->
-        // Family members pull the owner's meals/water over the network, so show a shimmer until the
-        // first data emission lands instead of flashing an empty screen.
         if (state.isLoading) {
             ListShimmer(
                 modifier = Modifier
@@ -199,6 +229,12 @@ fun FoodScreen(
                 MealItem(
                     meal = meal,
                     canEdit = state.isOwner,
+                    onOpen = { detailedMeal = meal },
+                    onShare = { shareMeal(context, meal) },
+                    onDownload = {
+                        pendingDownload = meal
+                        pdfLauncher.launch("Meal_${meal.mealType.replace(" ", "_")}.pdf")
+                    },
                     onToggle = { viewModel.sendIntent(FoodIntent.OnMealToggle(meal)) },
                     onEdit = { editingMeal = meal },
                     onDelete = { deletingMeal = meal }
@@ -208,6 +244,16 @@ fun FoodScreen(
             item { AppFooter() }
         }
     }
+}
+
+private fun shareMeal(context: android.content.Context, meal: MealEntity) {
+    val text = "Meal: ${meal.mealType}\nItems: ${meal.foodItems}\nTiming: ${meal.timing}"
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, "Meal Details")
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(Intent.createChooser(intent, "Share Meal"))
 }
 
 @Composable
@@ -230,7 +276,6 @@ fun WaterTrackerCard(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
             )
 
-            // Water adjustment is a write action — hidden for read-only family members.
             if (canEdit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     OutlinedButton(onClick = onRemove) { Text("-") }
@@ -241,20 +286,13 @@ fun WaterTrackerCard(
     }
 }
 
-/** A meal category with several relatable food suggestions. */
 private data class MealCategory(val emoji: String, val name: String, val items: List<String>)
 
-/**
- * Predefined, week-aware meal plan grouped by category (breakfast / lunch / evening snack / dinner),
- * each with 5+ relatable suggestions. Content shifts by trimester so it stays relevant to the
- * mother's current stage (first: folate & nausea-friendly, second: calcium/iron/protein,
- * third: energy & fiber with lighter dinners). Items lean on familiar Indian pregnancy foods.
- */
 private fun mealPlanForWeek(week: Int): Pair<String, List<MealCategory>> = when {
     week <= 12 -> "First trimester · focus on folic acid, hydration & easing nausea" to listOf(
         MealCategory("🌅", "Morning Breakfast", listOf(
             "Spinach & cheese omelet (folic acid)",
-            "Fortified oats with banana",
+            "Fortified oats with babyana",
             "Whole-grain toast with peanut butter",
             "Glass of milk or fresh orange juice",
             "Soaked almonds & walnuts",
@@ -317,7 +355,7 @@ private fun mealPlanForWeek(week: Int): Pair<String, List<MealCategory>> = when 
             "Idli / dosa with sambar",
             "Stuffed vegetable paratha (light oil)",
             "Muesli with milk & berries",
-            "Banana with dates",
+            "Babyana with dates",
             "Almond milk or warm milk"
         )),
         MealCategory("🍲", "Lunch", listOf(
@@ -362,10 +400,6 @@ fun RecommendedFoodSection(week: Int) {
     }
 }
 
-/**
- * One collapsible meal category: tapping the header toggles ITS OWN food list open/closed,
- * independently of the other categories (multiple can be expanded at once). Collapsed by default.
- */
 @Composable
 private fun CollapsibleFoodCategory(category: MealCategory) {
     var expanded by remember { mutableStateOf(false) }
@@ -431,36 +465,59 @@ fun AiNutritionCard(recommendation: String) {
 fun MealItem(
     meal: MealEntity,
     canEdit: Boolean,
+    onOpen: () -> Unit,
+    onShare: () -> Unit,
+    onDownload: () -> Unit,
     onToggle: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.padding(start = 16.dp).fillMaxWidth(),
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Checkbox(checked = meal.isTaken, onCheckedChange = { onToggle() }, enabled = canEdit)
             Column(modifier = Modifier.weight(1f).padding(vertical = 16.dp, horizontal = 8.dp)) {
                 Text(text = meal.mealType, fontWeight = FontWeight.Bold)
-                Text(text = meal.foodItems, style = MaterialTheme.typography.bodyMedium)
+                Text(text = meal.foodItems, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
                 Text(text = meal.timing, style = MaterialTheme.typography.bodySmall)
-                if (meal.daysOfWeek.isNotBlank()) {
-                    val days = meal.daysOfWeek.split(",")
-                    Text(
-                        text = if (days.size == 7) "Every day" else days.joinToString(", "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
             }
-            // Edit / delete controls are hidden for read-only family members.
-            if (canEdit) {
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary)
+
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "More")
                 }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Open") },
+                        leadingIcon = { Icon(Icons.Default.Visibility, contentDescription = null) },
+                        onClick = { menuExpanded = false; onOpen() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Download") },
+                        leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
+                        onClick = { menuExpanded = false; onDownload() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Share") },
+                        leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                        onClick = { menuExpanded = false; onShare() }
+                    )
+                    if (canEdit) {
+                        DropdownMenuItem(
+                            text = { Text("Edit") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = { menuExpanded = false; onEdit() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete") },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = { menuExpanded = false; onDelete() }
+                        )
+                    }
                 }
             }
         }
@@ -522,7 +579,6 @@ fun AddMealDialog(
 ) {
     var type by remember { mutableStateOf("Breakfast") }
     var items by remember { mutableStateOf("") }
-    // Weekdays the meal is planned for, in canonical Mon→Sun order (mirrors Add Medicine).
     val weekDays = remember { listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun") }
     var selectedDays by remember { mutableStateOf(emptySet<String>()) }
 
@@ -599,7 +655,6 @@ fun AddMealDialog(
                     )
                 )
 
-                // Weekday selection — at least one day is required before saving.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -646,7 +701,6 @@ fun AddMealDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    // Persist days in canonical Mon→Sun order, matching Add Medicine.
                     val days = weekDays.filter { it in selectedDays }.joinToString(",")
                     onSave(type, items, selectedTime, days)
                 },

@@ -17,7 +17,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.adarsh.hellomom.core.voice.VoiceIntentType
 import com.adarsh.hellomom.data.local.entity.SymptomLogEntity
+import com.adarsh.hellomom.presentation.voice.rememberVoicePrefillStore
 import com.adarsh.hellomom.presentation.components.ListShimmer
 import kotlinx.coroutines.flow.collectLatest
 
@@ -30,6 +32,11 @@ fun SymptomScreen(
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var showAddDialog by remember { mutableStateOf(false) }
+    // Voice assistant: open the Log Symptom dialog automatically when arrived via an "add symptom" command.
+    val voicePrefill = rememberVoicePrefillStore()
+    LaunchedEffect(Unit) {
+        if (voicePrefill.consumeAutoOpenAdd(VoiceIntentType.SYMPTOM)) showAddDialog = true
+    }
 
     LaunchedEffect(key1 = true) {
         viewModel.effect.collectLatest { effect ->

@@ -6,6 +6,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -24,6 +25,7 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.adarsh.hellomom.R
 import com.adarsh.hellomom.navigation.Screen
 import com.adarsh.hellomom.presentation.components.LoadingButton
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
@@ -142,6 +144,56 @@ fun LoginScreen(
         )
     }
 
+    if (state.requiresWhatsAppNumber) {
+        var whatsAppNumber by remember { mutableStateOf("") }
+        val isValid = state.isWhatsAppNumberValid(whatsAppNumber)
+        AlertDialog(
+            // Mandatory: cannot be dismissed by tapping outside or pressing back.
+            onDismissRequest = { },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            ),
+            icon = { Icon(Icons.Default.Phone, contentDescription = null) },
+            title = { Text("Add your WhatsApp number") },
+            text = {
+                Column {
+                    Text(
+                        "Enter the mobile number linked to your WhatsApp. " +
+                            "Your family uses it to send invites and stay in sync, " +
+                            "so please make sure it's an active WhatsApp number."
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = whatsAppNumber,
+                        onValueChange = {
+                            whatsAppNumber = it.filter { ch -> ch.isDigit() }
+                                .take(LoginState.WHATSAPP_NUMBER_LENGTH)
+                        },
+                        label = { Text("WhatsApp Number") },
+                        placeholder = { Text("10-digit mobile number") },
+                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        isError = whatsAppNumber.isNotEmpty() && !isValid,
+                        supportingText = if (whatsAppNumber.isNotEmpty() && !isValid) {
+                            { Text("Enter a valid ${LoginState.WHATSAPP_NUMBER_LENGTH}-digit number") }
+                        } else null,
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = isValid && !state.isLoading,
+                    onClick = { viewModel.sendIntent(LoginIntent.OnWhatsAppNumberSubmitted(whatsAppNumber)) }
+                ) {
+                    Text("Continue")
+                }
+            }
+        )
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
@@ -227,6 +279,12 @@ fun LoginScreen(
                 onClick = { viewModel.sendIntent(LoginIntent.OnGoogleSignInClicked) },
                 modifier = Modifier.fillMaxWidth().height(50.dp)
             ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_google),
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
                 Text("Sign in with Google")
             }
 

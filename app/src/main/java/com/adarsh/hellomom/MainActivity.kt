@@ -20,6 +20,7 @@ import com.adarsh.hellomom.core.utils.VoiceAssistant
 import com.adarsh.hellomom.data.local.PreferenceManager
 import com.adarsh.hellomom.navigation.NavGraph
 import com.adarsh.hellomom.presentation.permission.PermissionGate
+import com.adarsh.hellomom.presentation.voice.VoiceAssistantOverlay
 import com.adarsh.hellomom.presentation.update.UpdateChecker
 import com.adarsh.hellomom.ui.theme.HelloMomTheme
 import com.google.firebase.auth.FirebaseAuth
@@ -95,6 +96,9 @@ class MainActivity : ComponentActivity() {
                     navController = rememberNavController()
                     NavGraph(navController = navController)
 
+                    // App-wide offline voice assistant (mic + live panel). Hidden on auth/splash.
+                    VoiceAssistantOverlay(navController = navController)
+
                     // Auto-check for an app update on launch (force/optional dialog + in-app install).
                     UpdateChecker()
 
@@ -137,14 +141,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * The visible app — including the Material **date & time pickers** and every
+     * `Locale.getDefault()` date/number format — is always English, regardless of the device
+     * locale or the user's selected language. The language preference drives only the spoken
+     * voice/TTS and speech recognition (see VoiceAssistant, SpeechRecognizerManager,
+     * ReminderService), never the on-screen formatting. This is why a Hindi-voice user still sees
+     * English dates in the calendar/time pickers.
+     */
     private fun applyLocale() {
-        val language = preferenceManager.selectedLanguage
-        val locale = when (language) {
-            "Hindi" -> Locale("hi")
-            "Gujarati" -> Locale("gu")
-            "Marathi" -> Locale("mr")
-            else -> Locale.ENGLISH
-        }
+        val locale = Locale.ENGLISH
         Locale.setDefault(locale)
         val config = resources.configuration
         config.setLocale(locale)

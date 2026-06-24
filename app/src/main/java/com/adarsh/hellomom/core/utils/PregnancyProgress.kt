@@ -38,4 +38,12 @@ object PregnancyProgress {
         week <= 27 -> 2
         else -> 3
     }
+
+    /** Days remaining until the due date. Null if date is null. */
+    fun daysToGo(dueDate: Long?, now: Long = System.currentTimeMillis()): Int? {
+        if (dueDate == null || dueDate <= 0) return null
+        val diff = dueDate - now
+        if (diff <= 0) return 0
+        return (diff / DAY_MILLIS).toInt()
+    }
 }

@@ -3,6 +3,7 @@ package com.adarsh.hellomom.presentation.dashboard
 import androidx.lifecycle.viewModelScope
 import com.adarsh.hellomom.core.BaseViewModel
 import com.adarsh.hellomom.core.RoleManager
+import com.adarsh.hellomom.core.utils.PregnancyProgress
 import com.adarsh.hellomom.data.local.entity.ContractionEntity
 import com.adarsh.hellomom.domain.repository.ContractionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -43,12 +44,25 @@ class ContractionViewModel @Inject constructor(
             setState { copy(isLoading = true) }
             // Family members view the owner's contractions (activeUserId) read-only.
             val access = roleManager.resolveAccess()
-            if (access.user == null) {
+            val user = access.user
+            if (user == null) {
                 setState { copy(isLoading = false) }
                 return@launch
             }
+            
+            val owner = access.owner ?: user
+            val week = PregnancyProgress.week(owner.pregnancyStartDate)
+            
             contractionRepository.getContractions(access.activeUserId).collectLatest { list ->
-                setState { copy(contractions = list, isOwner = access.isOwner, isLoading = false) }
+                setState { 
+                    copy(
+                        contractions = list, 
+                        isOwner = access.isOwner,
+                        userName = user.fullName,
+                        pregnancyWeek = week,
+                        isLoading = false 
+                    ) 
+                }
                 applyFilter()
             }
         }

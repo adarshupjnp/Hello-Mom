@@ -20,6 +20,8 @@ data class ContractionState(
     val selectedDate: Long? = null,
     // Family members may view contractions but not record/edit/delete them.
     val isOwner: Boolean = false,
+    val userName: String = "",
+    val pregnancyWeek: Int = 1,
     val isLoading: Boolean = false
 ) : UiState
 

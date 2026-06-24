@@ -99,6 +99,16 @@ fun DocumentsScreen(
         }
     }
 
+    // Voice assistant: open the upload picker automatically when arrived via a voice command.
+    val voicePrefill = com.adarsh.hellomom.presentation.voice.rememberVoicePrefillStore()
+    LaunchedEffect(Unit) {
+        if (voicePrefill.consumeAutoOpenAdd(com.adarsh.hellomom.core.voice.VoiceIntentType.REPORTS)) {
+            if (state.isOwner && state.uploadProgress == null) {
+                pickFileLauncher.launch(DocumentConstants.PICKER_MIME_TYPES)
+            }
+        }
+    }
+
     if (pendingUploadUri != null) {
         UploadDocumentDialog(
             suggestedTitle = remember(pendingUploadUri) { queryDisplayName(context, pendingUploadUri!!).substringBeforeLast('.') },

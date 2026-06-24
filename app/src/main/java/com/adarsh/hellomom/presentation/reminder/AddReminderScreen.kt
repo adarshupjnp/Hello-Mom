@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.adarsh.hellomom.presentation.voice.rememberVoicePrefillStore
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -23,11 +24,21 @@ fun AddReminderScreen(
     navController: NavController,
     viewModel: ReminderViewModel = hiltViewModel()
 ) {
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var voiceMessage by remember { mutableStateOf("") }
-    
-    val timePickerState = rememberTimePickerState()
+    // Voice assistant prefill: arriving via a "set reminder" voice command fills the title and time.
+    val voicePrefill = rememberVoicePrefillStore()
+    val prefill = remember { voicePrefill.consumeReminder() }
+
+    var title by remember { mutableStateOf(prefill?.title.orEmpty()) }
+    var description by remember { mutableStateOf(prefill?.title.orEmpty()) }
+    var voiceMessage by remember { mutableStateOf(prefill?.title.orEmpty()) }
+
+    val prefillCal = remember {
+        Calendar.getInstance().apply { prefill?.timeMillis?.let { timeInMillis = it } }
+    }
+    val timePickerState = rememberTimePickerState(
+        initialHour = prefillCal.get(Calendar.HOUR_OF_DAY),
+        initialMinute = prefillCal.get(Calendar.MINUTE)
+    )
     
     val selectedTimeDisplay = remember(timePickerState.hour, timePickerState.minute) {
         val cal = Calendar.getInstance()
