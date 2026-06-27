@@ -11,6 +11,7 @@ sealed class RegisterIntent : UiIntent {
     data class OnConfirmPasswordChanged(val confirmPassword: String) : RegisterIntent()
     data class OnMobileChanged(val mobile: String) : RegisterIntent()
     data class OnDobChanged(val dob: Long) : RegisterIntent()
+    data class OnFamilyRoleChanged(val role: String) : RegisterIntent()
     object OnRegisterClicked : RegisterIntent()
     object OnLoginClicked : RegisterIntent()
 }
@@ -22,9 +23,15 @@ data class RegisterState(
     val confirmPassword: String = "",
     val mobile: String = "",
     val dob: Long = 0,
+    val familyRole: String = "",
     val isLoading: Boolean = false,
+    val showSuccessAnimation: Boolean = false,
     val error: String? = null
 ) : UiState {
+    /** True if the current inputs identify this user as a pregnancy owner (Adarsh/Riya). */
+    val isOwnerCandidate: Boolean
+        get() = com.adarsh.hellomom.core.RoleManager.isOwnerUser(fullName, email)
+
     /** Full name must be 2-50 characters after trimming surrounding whitespace. */
     val isFullNameValid: Boolean
         get() = fullName.trim().length in FULL_NAME_MIN_LENGTH..FULL_NAME_MAX_LENGTH
@@ -49,10 +56,14 @@ data class RegisterState(
     val doPasswordsMatch: Boolean
         get() = confirmPassword.isNotEmpty() && password == confirmPassword
 
+    /** Family role must be selected if NOT an owner candidate. */
+    val isFamilyRoleValid: Boolean
+        get() = isOwnerCandidate || familyRole.isNotBlank()
+
     /** Registration is allowed only when every field passes validation. */
     val isRegisterEnabled: Boolean
         get() = isFullNameValid && isEmailValid && isMobileValid &&
-            isPasswordValid && doPasswordsMatch
+            isPasswordValid && doPasswordsMatch && isFamilyRoleValid
 
     companion object {
         const val FULL_NAME_MIN_LENGTH = 2
@@ -68,4 +79,5 @@ sealed class RegisterEffect : UiEffect {
     object NavigateToHome : RegisterEffect()
     object NavigateToLogin : RegisterEffect()
     data class ShowError(val message: String) : RegisterEffect()
+    data class ShowSuccess(val message: String) : RegisterEffect()
 }

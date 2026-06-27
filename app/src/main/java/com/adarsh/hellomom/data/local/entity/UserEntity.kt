@@ -23,6 +23,8 @@ data class UserEntity(
     val height: Float? = null,
     val allergies: String? = null,
     val linkedPrimaryUserId: String? = null,
+    /** The role of this user if they are a family member (e.g. Husband, Brother). */
+    val familyRole: String? = null,
     /** Daily routine wake-up time for Today's Schedule, e.g. "07:00 AM" (owner-configurable). */
     val wakeUpTime: String? = null,
     /** Daily routine sleep time for Today's Schedule, e.g. "10:00 PM" (owner-configurable). */

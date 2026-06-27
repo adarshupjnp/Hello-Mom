@@ -136,7 +136,7 @@ class RoleManager @Inject constructor(
                     name = user.fullName,
                     email = user.email,
                     phoneNumber = user.mobileNumber,
-                    role = "Family Member",
+                    role = user.familyRole ?: "Family Member",
                     permissions = "view",
                     status = "Accepted"
                 )

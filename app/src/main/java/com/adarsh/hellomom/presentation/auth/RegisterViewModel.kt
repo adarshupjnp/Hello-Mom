@@ -23,6 +23,7 @@ class RegisterViewModel @Inject constructor(
             is RegisterIntent.OnConfirmPasswordChanged -> setState { copy(confirmPassword = intent.confirmPassword) }
             is RegisterIntent.OnMobileChanged -> setState { copy(mobile = intent.mobile) }
             is RegisterIntent.OnDobChanged -> setState { copy(dob = intent.dob) }
+            is RegisterIntent.OnFamilyRoleChanged -> setState { copy(familyRole = intent.role) }
             RegisterIntent.OnRegisterClicked -> register()
             RegisterIntent.OnLoginClicked -> setEffect { RegisterEffect.NavigateToLogin }
         }
@@ -31,7 +32,9 @@ class RegisterViewModel @Inject constructor(
     private fun register() {
         viewModelScope.launch {
             if (!uiState.value.isRegisterEnabled) {
-                setEffect { RegisterEffect.ShowError("Please fix the highlighted fields before continuing") }
+                val error = if (!uiState.value.isFamilyRoleValid) "Please select your relationship"
+                else "Please fix the highlighted fields before continuing"
+                setEffect { RegisterEffect.ShowError(error) }
                 return@launch
             }
 
@@ -51,12 +54,22 @@ class RegisterViewModel @Inject constructor(
                 hospitalName = null,
                 weight = null,
                 height = null,
-                allergies = null
+                allergies = null,
+                familyRole = if (uiState.value.isOwnerCandidate) null else uiState.value.familyRole
             )
             val result = authRepository.register(user, uiState.value.password)
             result.onSuccess {
+                setState { copy(isLoading = false, showSuccessAnimation = true) }
+                val msg = if (uiState.value.isOwnerCandidate) 
+                    "Welcome Mom! Your account has been created successfully. Let's set up your profile."
+                else 
+                    "Success! Your family account is ready. Welcome to the journey!"
+                
+                setEffect { RegisterEffect.ShowSuccess(msg) }
+                
+                kotlinx.coroutines.delay(2500) // Show animation and message
+                
                 val isOwner = com.adarsh.hellomom.core.RoleManager.isOwnerUser(user.fullName, user.email)
-
                 if (isOwner) {
                     setEffect { RegisterEffect.NavigateToProfileCreation }
                 } else {
