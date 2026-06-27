@@ -174,7 +174,7 @@ class IntentDetector @Inject constructor() {
             ),
             VoiceIntentType.WATER_INTAKE to listOf(
                 "water", "log water", "drank water", "pani piya", "ek glass pani",
-                "pani add karo", "पानी", "एक गिलास पानी", "पानी रिकॉर्ड करो"
+                "pani add karo", "पानी", "एक गिलास पानी", "पानी रिकॉर्ड करो", "glas", "glass", "gilaas"
             ),
             VoiceIntentType.EMERGENCY to listOf(
                 "emergency", "sos", "call ambulance", "ambulance ko phone karo",
@@ -183,6 +183,18 @@ class IntentDetector @Inject constructor() {
             VoiceIntentType.MOTIVATION to listOf(
                 "motivation", "quote", "daily quote", "vichar", "suvichar", "motivate me",
                 "आज का विचार", "प्रेरणा", "quote sunao"
+            ),
+            VoiceIntentType.WEIGHT to listOf(
+                "weight", "vajan", "vazan", "vajan add karo", "vajan likho", "vazan add karo",
+                "वजन", "वज़न", "वजन जोड़ो", "मेरा वजन"
+            ),
+            VoiceIntentType.STEPS to listOf(
+                "steps", "kadam", "step count", "steps add karo", "kadam likho",
+                "कदम", "स्टेप्स", "कदम जोड़ो"
+            ),
+            VoiceIntentType.SLEEP to listOf(
+                "sleep", "soyi", "sleep hours", "sleep add karo", "neend", "ghante soyi",
+                "नींद", "सोना", "नींद जोड़ो", "घंटे सोयी"
             ),
             VoiceIntentType.HOME to listOf(
                 "home", "dashboard", "main screen", "ghar", "home kholo", "होम", "डैशबोर्ड"

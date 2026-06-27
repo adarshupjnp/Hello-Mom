@@ -25,6 +25,8 @@ class EntityExtractor @Inject constructor() {
         val doctorName: String? = null,
         val medicineName: String? = null,
         val frequency: String? = null,
+        val quantity: Int? = null,
+        val value: Float? = null,
         val query: String? = null
     )
 
@@ -39,6 +41,8 @@ class EntityExtractor @Inject constructor() {
             doctorName = parseDoctor(normalized),
             medicineName = parseMedicine(normalized),
             frequency = parseFrequency(normalized),
+            quantity = parseQuantity(normalized),
+            value = parseValue(normalized),
             query = parseQuery(normalized)
         )
     }
@@ -121,6 +125,18 @@ class EntityExtractor @Inject constructor() {
     private fun parseFrequency(normalized: String): String? =
         if (contains(normalized, "roz", "daily", "everyday", "har din", "रोज", "रोज़", "हर दिन")) "Daily" else null
 
+    private fun parseQuantity(normalized: String): Int? {
+        // Look for digits followed by glass keywords or standalone
+        val match = Regex("(\\d+)\\s*(?:glass|gilaas|glas|गिलास|glasss|kadam|steps|कदम|step)?").find(normalized)
+        return match?.groupValues?.get(1)?.toIntOrNull()
+    }
+
+    private fun parseValue(normalized: String): Float? {
+        // Match integers or decimals (e.g. 50, 50.9)
+        val match = Regex("(\\d+(?:\\.\\d+)?)\\s*(?:kg|kilo|kilograms|किलो|hours|hour|ghante|घंटे|घंटा)?").find(normalized)
+        return match?.groupValues?.get(1)?.toFloatOrNull()
+    }
+
     private fun parseQuery(normalized: String): String? {
         val q = normalized.split(' ')
             .filter { it.isNotBlank() && it !in QUERY_STOPWORDS }
@@ -162,7 +178,9 @@ class EntityExtractor @Inject constructor() {
         var day: Int? = null
         var month: Int? = null
         for ((i, t) in tokens.withIndex()) {
-            val asDay = t.toIntOrNull()
+            // Strip ordinal suffixes (1st, 2nd, 3rd, 4th, etc.)
+            val numericPart = t.replace(Regex("(?<=\\d)(st|nd|rd|th)$", RegexOption.IGNORE_CASE), "")
+            val asDay = numericPart.toIntOrNull()
             if (asDay != null && asDay in 1..31) {
                 day = asDay
                 // month may be the neighbouring token

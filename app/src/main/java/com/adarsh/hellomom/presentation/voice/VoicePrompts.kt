@@ -162,6 +162,21 @@ internal object P {
         "बहुत अच्छे! एक गिलास पानी जोड़ दिया है। आज कुल: $glasses गिलास।",
         "Great! Ek glass pani add kar diya hai. Total aaj: $glasses glasses.")
 
+    fun weightLogged(kg: Float, lang: String) = pick(lang,
+        "Done! Your weight has been updated to $kg kg.",
+        "ठीक है! आपका वजन $kg किलो अपडेट कर दिया गया है।",
+        "Done! Aapka weight $kg kg update kar diya gaya hai.")
+
+    fun stepsLogged(steps: Int, lang: String) = pick(lang,
+        "Success! I've recorded $steps steps for today.",
+        "सफलतापूर्वक! आज के लिए आपके $steps कदम रिकॉर्ड कर लिए गए हैं।",
+        "Success! Aaj ke liye aapke $steps steps record kar liye gaye hain.")
+
+    fun sleepLogged(hours: Float, lang: String) = pick(lang,
+        "Noted! I've logged $hours hours of sleep for you.",
+        "नोट कर लिया! आपके लिए $hours घंटे की नींद रिकॉर्ड कर ली गई है।",
+        "Noted! Aapke liye $hours hours ki neend record kar li gayi hai.")
+
     fun emergencyDialing(lang: String) = pick(lang,
         "Calling emergency services (102) now.",
         "अभी इमरजेंसी सेवा (102) को कॉल लगा रही हूँ।",
@@ -229,6 +244,54 @@ internal object P {
         "क्या मैं आपकी किसी और चीज़ में मदद कर सकती हूँ?",
         "Kya main aapki kisi aur cheez mein madad kar sakti hoon?")
 
+    fun aiDisclaimer(lang: String) = pick(lang,
+        "I've prepared the details. Please review them before saving, as I'm an AI and can occasionally make mistakes.",
+        "मैंने जानकारी तैयार कर दी है। कृपया सेव करने से पहले एक बार जांच लें, क्योंकि एआई से कभी-कभी गलती हो सकती है।",
+        "Maine details ready kar di hain. Please save karne se pehle ek baar check kar lein, kyunki AI se kabhi galti ho sakti hai.")
+
+    fun confirmAdd(summary: String, lang: String) = pick(lang,
+        "Should I add $summary? Please say yes or no.",
+        "क्या मैं $summary जोड़ दूँ? हाँ या नहीं बोलिए।",
+        "Kya main $summary add kar doon? Haan ya nahi boliye.")
+
+    fun actionSummary(intent: VoiceIntentType, result: com.adarsh.hellomom.core.voice.VoiceCommandResult, lang: String): String {
+        return when (intent) {
+            VoiceIntentType.WATER_INTAKE -> {
+                val q = result.quantity ?: 1
+                pick(lang, "$q glasses of water", "$q गिलास पानी", "$q glasses pani")
+            }
+            VoiceIntentType.WEIGHT -> {
+                val v = result.value ?: 0f
+                pick(lang, "weight as $v kg", "वजन $v किलो", "weight $v kg")
+            }
+            VoiceIntentType.STEPS -> {
+                val q = result.quantity ?: 0
+                pick(lang, "$q steps", "$q कदम", "$q steps")
+            }
+            VoiceIntentType.SLEEP -> {
+                val v = result.value ?: 0f
+                pick(lang, "$v hours of sleep", "$v घंटे की नींद", "$v hours sleep")
+            }
+            VoiceIntentType.KICK_COUNT -> pick(lang, "a baby kick", "बच्चे की एक किक", "ek baby kick")
+            VoiceIntentType.MEDICINE -> {
+                val n = result.medicineName ?: "medicine"
+                val t = result.time?.let { " at $it" } ?: ""
+                pick(lang, "$n$t", "$n$t", "$n$t")
+            }
+            VoiceIntentType.REMINDERS -> {
+                val q = result.query ?: "reminder"
+                val t = result.time?.let { " at $it" } ?: ""
+                pick(lang, "$q$t", "$q$t", "$q$t")
+            }
+            VoiceIntentType.APPOINTMENT -> {
+                val d = result.date ?: "appointment"
+                val doc = result.doctorName?.let { " with $it" } ?: ""
+                pick(lang, "appointment on $d$doc", "$d को $doc के साथ अपॉइंटमेंट", "$d ko $doc ke saath appointment")
+            }
+            else -> pick(lang, "this entry", "इसे", "ise")
+        }
+    }
+
     fun featureName(intent: VoiceIntentType, lang: String): String = when (intent) {
         // Hinglish reuses the English loanword (omitted hinglish arg → defaults to English label).
         VoiceIntentType.HOME -> pick(lang, "Home", "होम")
@@ -260,6 +323,9 @@ internal object P {
         VoiceIntentType.WATER_INTAKE -> pick(lang, "Water tracker", "पानी")
         VoiceIntentType.EMERGENCY -> pick(lang, "Emergency SOS", "इमरजेंसी")
         VoiceIntentType.MOTIVATION -> pick(lang, "Daily quote", "विचार")
+        VoiceIntentType.WEIGHT -> pick(lang, "Weight tracker", "वजन")
+        VoiceIntentType.STEPS -> pick(lang, "Step counter", "कदम")
+        VoiceIntentType.SLEEP -> pick(lang, "Sleep tracker", "नींद")
         VoiceIntentType.UNKNOWN -> pick(lang, "Home", "होम")
     }
 }

@@ -62,6 +62,7 @@ class VoiceAssistantViewModel @Inject constructor(
     private val reminderRepository: ReminderRepository,
     private val scheduleRepository: ScheduleRepository,
     private val dashboardRepository: DashboardRepository,
+    private val appointmentRepository: AppointmentRepository,
     private val micVisibilityController: MicVisibilityController
 ) : BaseViewModel<VoiceAssistantIntent, VoiceAssistantState, VoiceAssistantEffect>() {
 
@@ -84,6 +85,7 @@ class VoiceAssistantViewModel @Inject constructor(
     // X?") and waits for a yes/no. [pendingSuggestion] is what it would open on "yes".
     private var awaitingConfirmation = false
     private var pendingSuggestion: VoiceIntentType? = null
+    private var pendingAction: VoiceCommandResult? = null
     // Consecutive misses in the current session ("no speech" or "couldn't match"). Caps the
     // clarify-and-listen-again loop so it gives one extra ~10s try, then stops.
     private var attempts = 0
@@ -264,10 +266,13 @@ class VoiceAssistantViewModel @Inject constructor(
             return
         }
         
-        // If the assistant just opened a screen and asked "Anything else?", but the user stayed 
-        // silent -> auto-navigate back to Home/Dashboard so the user doesn't have to tap Back.
+        // If the assistant just asked "Anything else?", but the user stayed silent:
         if (uiState.value.status == VoiceStatus.FOLLOW_UP) {
-            navigate("home")
+            // IF it was just a view/query (OPEN/SEARCH/NONE) -> navigate back to Home.
+            // IF it was a CREATE action -> stay on current screen so user can see/save data.
+            if (uiState.value.lastAction != VoiceActionType.CREATE) {
+                navigate("home")
+            }
             say(P.goodbye(lang()), VoiceStatus.IDLE)
             return
         }
@@ -342,7 +347,8 @@ class VoiceAssistantViewModel @Inject constructor(
             date = e.dateLabel, dateMillis = e.dateMillis,
             time = e.timeLabel, timeOfDayMinutes = e.timeMinutes,
             doctorName = e.doctorName, medicineName = e.medicineName,
-            frequency = e.frequency, query = e.query,
+            frequency = e.frequency, quantity = e.quantity,
+            query = e.query,
             rawText = normalized
         )
         SyncLogger.info("VOICE intent=${detection.intent} action=$action conf=${"%.2f".format(detection.confidence)}")
@@ -366,33 +372,27 @@ class VoiceAssistantViewModel @Inject constructor(
         // Emergency is immediate and doesn't require the dashboard state/ownership check.
         if (intent == VoiceIntentType.EMERGENCY) {
             resetDialogue()
+            setState { copy(lastAction = VoiceActionType.OPEN) }
             say(P.emergencyDialing(lang()), VoiceStatus.IDLE)
             setEffect { VoiceAssistantEffect.DialEmergency }
             return
         }
 
         if (intent in STATUS_INTENTS && rawAction != VoiceActionType.CREATE) {
+            setState { copy(lastAction = VoiceActionType.OPEN) }
             handleStatusIntent(intent)
             return
         }
         val action = coerceAction(intent, rawAction)
+        setState { copy(lastAction = action) }
         if (action == VoiceActionType.CREATE || action == VoiceActionType.UPDATE || action == VoiceActionType.DELETE) {
             viewModelScope.launch {
                 if (!resolveIsOwner()) { say(P.notAuthorized(lang()), VoiceStatus.IDLE); return@launch }
                 if (action == VoiceActionType.CREATE) {
                     when (intent) {
-                        VoiceIntentType.KICK_COUNT -> {
-                            val userId = roleManager.resolveAccess().user?.userId.orEmpty()
-                            dashboardRepository.incrementKickCount(userId)
-                            val count = dashboardRepository.getDailyKickCount(userId).first()
-                            sayAndAskMore(P.kickLogged(count, lang()))
-                        }
-                        VoiceIntentType.WATER_INTAKE -> {
-                            val userId = roleManager.resolveAccess().user?.userId.orEmpty()
-                            val health = dashboardRepository.getMotherHealthData(userId).first()
-                            val newGlasses = health.waterIntake + 1
-                            dashboardRepository.updateMotherHealthData(userId, health.copy(waterIntake = newGlasses))
-                            sayAndAskMore(P.waterLogged(newGlasses, lang()))
+                        VoiceIntentType.KICK_COUNT, VoiceIntentType.WATER_INTAKE,
+                        VoiceIntentType.WEIGHT, VoiceIntentType.STEPS, VoiceIntentType.SLEEP -> {
+                            askActionConfirmation(result.copy(intentType = intent))
                         }
                         else -> startCreate(intent, result)
                     }
@@ -409,7 +409,7 @@ class VoiceAssistantViewModel @Inject constructor(
         val required = VoiceSlotRules.requiredSlots(intent, VoiceActionType.CREATE)
         val missing = required - VoiceSlotRules.filledSlots(result)
         if (missing.isEmpty()) {
-            completeCreate(intent, result)
+            askActionConfirmation(result.copy(intentType = intent))
         } else {
             dialogue = Dialogue(intent, VoiceActionType.CREATE, result)
             askSlot(missing.first())
@@ -419,7 +419,11 @@ class VoiceAssistantViewModel @Inject constructor(
     private fun continueDialogue(active: Dialogue, normalized: String) {
         val slot = uiState.value.awaitingSlot ?: VoiceSlotRules.requiredSlots(active.intent, active.action)
             .firstOrNull { it !in VoiceSlotRules.filledSlots(active.result) }
-        if (slot == null) { completeCreate(active.intent, active.result); dialogue = null; return }
+        if (slot == null) { 
+            askActionConfirmation(active.result.copy(intentType = active.intent))
+            dialogue = null
+            return 
+        }
 
         val merged = mergeSlot(active.result, slot, normalized)
         active.result = merged
@@ -427,7 +431,7 @@ class VoiceAssistantViewModel @Inject constructor(
         val stillMissing = VoiceSlotRules.requiredSlots(active.intent, active.action) - VoiceSlotRules.filledSlots(merged)
         if (stillMissing.isEmpty()) {
             dialogue = null
-            completeCreate(active.intent, merged)
+            askActionConfirmation(merged.copy(intentType = active.intent))
         } else {
             active.followUps++
             if (active.followUps > MAX_FOLLOW_UPS) { resetDialogue(); fallback() }
@@ -523,6 +527,24 @@ class VoiceAssistantViewModel @Inject constructor(
                     val days = PregnancyProgress.daysToGo(due)
                     P.deliveryDate(dateStr, days, lang())
                 }
+                VoiceIntentType.APPOINTMENT -> {
+                    val targetUserId = access.activeUserId.ifEmpty { user?.userId.orEmpty() }
+                    val appointments = appointmentRepository.getAppointments(targetUserId).first()
+                    val now = System.currentTimeMillis()
+                    val next = appointments
+                        .filter { it.appointmentTime >= now }
+                        .minByOrNull { it.appointmentTime }
+                    
+                    if (next != null) {
+                        val date = SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(next.appointmentTime))
+                        val time = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(next.appointmentTime))
+                        P.nextAppointment(date, time, next.doctorName, lang())
+                    } else {
+                        pendingSuggestion = VoiceIntentType.APPOINTMENT
+                        awaitingConfirmation = true
+                        P.noAppointments(lang())
+                    }
+                }
                 VoiceIntentType.TODAY_SCHEDULE -> {
                     val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
                     val meds = medicineRepository.getMedicines(targetUserId).first()
@@ -561,8 +583,14 @@ class VoiceAssistantViewModel @Inject constructor(
             if (msg.isNotBlank()) {
                 // For status checks, we often want to see the relevant screen.
                 if (intent == VoiceIntentType.TODAY_SCHEDULE || intent == VoiceIntentType.MOTIVATION) navigate("home")
+                else if (intent == VoiceIntentType.APPOINTMENT) navigate("appointment")
                 else navigate("baby_progress")
-                sayAndAskMore(msg)
+                
+                if (awaitingConfirmation) {
+                    speakThenListen(msg)
+                } else {
+                    sayAndAskMore(msg)
+                }
             } else {
                 fallback()
             }
@@ -631,13 +659,75 @@ class VoiceAssistantViewModel @Inject constructor(
     /** Resolve a "did you mean X?" answer: yes → open it, anything else → polite decline. */
     private fun handleConfirmation(normalized: String) {
         attempts = 0
-        val intent = pendingSuggestion
+        val suggestion = pendingSuggestion
+        val action = pendingAction
         awaitingConfirmation = false
         pendingSuggestion = null
-        if (isYes(normalized) && intent != null) {
-            openOrSearch(intent, VoiceActionType.OPEN, VoiceCommandResult())
+        pendingAction = null
+
+        if (isYes(normalized)) {
+            if (action != null) {
+                executeConfirmedAction(action)
+            } else if (suggestion != null) {
+                // If we were asking about a missing appointment, start creation.
+                // Otherwise it's a "Did you mean X?" suggestion, so just open it.
+                if (suggestion == VoiceIntentType.APPOINTMENT && uiState.value.status != VoiceStatus.SPEAKING) {
+                    startCreate(suggestion, VoiceCommandResult())
+                } else {
+                    openOrSearch(suggestion, VoiceActionType.OPEN, VoiceCommandResult())
+                }
+            }
         } else {
             say(P.suggestionDeclined(lang()), VoiceStatus.IDLE)
+        }
+    }
+
+    private fun askActionConfirmation(result: VoiceCommandResult) {
+        dialogue = null
+        pendingAction = result
+        awaitingConfirmation = true
+        val summary = P.actionSummary(result.intentType, result, lang())
+        speakThenListen(P.confirmAdd(summary, lang()))
+    }
+
+    private fun executeConfirmedAction(result: VoiceCommandResult) {
+        when (result.intentType) {
+            VoiceIntentType.KICK_COUNT -> viewModelScope.launch {
+                val userId = roleManager.resolveAccess().user?.userId.orEmpty()
+                dashboardRepository.incrementKickCount(userId)
+                val count = dashboardRepository.getDailyKickCount(userId).first()
+                sayAndAskMore("${P.kickLogged(count, lang())} ${P.aiDisclaimer(lang())}")
+            }
+            VoiceIntentType.WATER_INTAKE -> viewModelScope.launch {
+                val userId = roleManager.resolveAccess().user?.userId.orEmpty()
+                val health = dashboardRepository.getMotherHealthData(userId).first()
+                val addGlasses = result.quantity ?: 1
+                val newGlasses = health.waterIntake + addGlasses
+                dashboardRepository.updateMotherHealthData(userId, health.copy(waterIntake = newGlasses))
+                sayAndAskMore("${P.waterLogged(newGlasses, lang())} ${P.aiDisclaimer(lang())}")
+            }
+            VoiceIntentType.WEIGHT -> viewModelScope.launch {
+                val userId = roleManager.resolveAccess().user?.userId.orEmpty()
+                val health = dashboardRepository.getMotherHealthData(userId).first()
+                val kg = result.value ?: 0f
+                dashboardRepository.updateMotherHealthData(userId, health.copy(weight = kg))
+                sayAndAskMore("${P.weightLogged(kg, lang())} ${P.aiDisclaimer(lang())}")
+            }
+            VoiceIntentType.STEPS -> viewModelScope.launch {
+                val userId = roleManager.resolveAccess().user?.userId.orEmpty()
+                val health = dashboardRepository.getMotherHealthData(userId).first()
+                val steps = result.quantity ?: 0
+                dashboardRepository.updateMotherHealthData(userId, health.copy(steps = steps))
+                sayAndAskMore("${P.stepsLogged(steps, lang())} ${P.aiDisclaimer(lang())}")
+            }
+            VoiceIntentType.SLEEP -> viewModelScope.launch {
+                val userId = roleManager.resolveAccess().user?.userId.orEmpty()
+                val health = dashboardRepository.getMotherHealthData(userId).first()
+                val hours = result.value ?: 0f
+                dashboardRepository.updateMotherHealthData(userId, health.copy(sleepHours = hours))
+                sayAndAskMore("${P.sleepLogged(hours, lang())} ${P.aiDisclaimer(lang())}")
+            }
+            else -> completeCreate(result.intentType, result)
         }
     }
 
@@ -667,6 +757,7 @@ class VoiceAssistantViewModel @Inject constructor(
             n.contains("trimester") || n.contains("ट्राइमेस्टर") -> VoiceIntentType.PREGNANCY_WEEK
             (n.contains("week") || n.contains("hafta") || n.contains("हफ्ता") || n.contains("सप्ताह")) && asks -> VoiceIntentType.PREGNANCY_WEEK
             (n.contains("schedule") || n.contains("shedyul") || n.contains("शेड्यूल")) && asks -> VoiceIntentType.TODAY_SCHEDULE
+            (n.contains("appointment") || n.contains("doctor") || n.contains("मिलना") || n.contains("अपॉइंटमेंट")) && asks -> VoiceIntentType.APPOINTMENT
             (n.contains("kick") || n.contains("kik") || n.contains("halchal") || n.contains("laat")) && (asks || baby) -> VoiceIntentType.KICK_COUNT
             (n.contains("water") || n.contains("pani")) && asks -> VoiceIntentType.WATER_INTAKE
             n.contains("quote") || n.contains("vichar") || n.contains("suvichar") || n.contains("motivation") -> VoiceIntentType.MOTIVATION
@@ -769,8 +860,9 @@ class VoiceAssistantViewModel @Inject constructor(
         welcomeSession = false
         awaitingConfirmation = false
         pendingSuggestion = null
+        pendingAction = null
         attempts = 0
-        setState { copy(awaitingSlot = null, suggestions = emptyList()) }
+        setState { copy(awaitingSlot = null, suggestions = emptyList(), lastAction = VoiceActionType.NONE) }
     }
 
     private fun lang(): String = preferenceManager.selectedLanguage
@@ -808,6 +900,9 @@ class VoiceAssistantViewModel @Inject constructor(
         VoiceIntentType.HELP_SUPPORT -> "help_support"
         VoiceIntentType.MOTIVATION -> "home"
         VoiceIntentType.EMERGENCY -> "home"
+        VoiceIntentType.WEIGHT -> "home"
+        VoiceIntentType.STEPS -> "home"
+        VoiceIntentType.SLEEP -> "home"
         VoiceIntentType.UNKNOWN -> "home"
     }
 

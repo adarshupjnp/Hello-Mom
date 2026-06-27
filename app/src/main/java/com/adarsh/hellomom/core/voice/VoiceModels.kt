@@ -39,6 +39,9 @@ enum class VoiceIntentType {
     WATER_INTAKE,
     EMERGENCY,
     MOTIVATION,
+    WEIGHT,
+    STEPS,
+    SLEEP,
     UNKNOWN
 }
 
@@ -65,6 +68,8 @@ data class VoiceCommandResult(
     val doctorName: String? = null,
     val medicineName: String? = null,
     val frequency: String? = null,        // e.g. "Daily"
+    val quantity: Int? = null,
+    val value: Float? = null,
     val query: String? = null,
     val rawText: String = ""
 ) {

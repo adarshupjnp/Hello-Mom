@@ -40,6 +40,8 @@ data class VoiceAssistantState(
     val suggestions: List<VoiceIntentType> = emptyList(),
     /** Non-null while the assistant is waiting for the user to supply a specific field. */
     val awaitingSlot: VoiceSlot? = null,
+    /** Tracks if the last operation was a data creation vs a simple view/query. */
+    val lastAction: com.adarsh.hellomom.core.voice.VoiceActionType = com.adarsh.hellomom.core.voice.VoiceActionType.NONE,
     /** True when the selected language is Hindi/Hinglish (drives chip labels + UI copy). */
     val hindi: Boolean = true,
     /** False if an external component (like a full-screen AI chat) has requested the mic to hide. */
