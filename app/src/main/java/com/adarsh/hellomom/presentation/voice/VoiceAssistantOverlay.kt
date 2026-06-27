@@ -1,7 +1,9 @@
 package com.adarsh.hellomom.presentation.voice
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
@@ -64,6 +66,12 @@ fun VoiceAssistantOverlay(
                     navController.navigate(effect.route) { launchSingleTop = true }
                 is VoiceAssistantEffect.NavigateToTab ->
                     selectDashboardTab(navController, effect.tabIndex)
+                VoiceAssistantEffect.DialEmergency -> {
+                    val intent = Intent(Intent.ACTION_DIAL).apply {
+                        data = Uri.parse("tel:102")
+                    }
+                    context.startActivity(intent)
+                }
             }
         }
     }

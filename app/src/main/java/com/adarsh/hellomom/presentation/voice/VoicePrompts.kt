@@ -132,6 +132,16 @@ internal object P {
         "इस हफ़्ते बच्चे का वजन लगभग $weight है।",
         "Is week baby ka weight lagbhag $weight hai.")
 
+    fun babyLength(length: String, lang: String) = pick(lang,
+        "This week, the baby's length is about $length.",
+        "इस हफ़्ते बच्चे की लंबाई लगभग $length है।",
+        "Is week baby ki lambai lagbhag $length hai.")
+
+    fun babyFullProgress(week: Int, day: Int, size: String, weight: String, length: String, milestone: String, lang: String) = pick(lang,
+        "You're in week $week, day $day. Your baby is about the size of a $size, weighing $weight and measuring $length. The main milestone this week is: $milestone.",
+        "आप $week वें हफ़्ते के $day वें दिन पर हैं। आपका बच्चा एक $size के बराबर है, जिसका वजन $weight और लंबाई $length है। इस हफ्ते का मुख्य बदलाव है: $milestone।",
+        "Aap week $week, day $day par hain. Baby abhi ek $size jitna hai, weight $weight aur length $length hai. Is week ka milestone hai: $milestone.")
+
     fun babySize(size: String, lang: String) = pick(lang,
         "Your baby is currently about the size of a $size.",
         "आपका बच्चा अभी एक $size के बराबर है।",
@@ -142,6 +152,21 @@ internal object P {
         "अभी आप $week वें हफ़्ते के $day वें दिन पर हैं।",
         "Abhi aap week $week, day $day par hain.")
 
+    fun kickLogged(count: Int, lang: String) = pick(lang,
+        "Done! I've recorded a kick. That makes $count movements today.",
+        "ठीक है! बच्चे की एक किक रिकॉर्ड कर ली है। आज कुल $count हलचल हुई हैं।",
+        "Done! Ek kick record kar li hai. Aaj total $count kicks ho gayi hain.")
+
+    fun waterLogged(glasses: Int, lang: String) = pick(lang,
+        "Great! I've added a glass of water. Total today: $glasses glasses.",
+        "बहुत अच्छे! एक गिलास पानी जोड़ दिया है। आज कुल: $glasses गिलास।",
+        "Great! Ek glass pani add kar diya hai. Total aaj: $glasses glasses.")
+
+    fun emergencyDialing(lang: String) = pick(lang,
+        "Calling emergency services (102) now.",
+        "अभी इमरजेंसी सेवा (102) को कॉल लगा रही हूँ।",
+        "Emergency services (102) ko call laga rahi hoon.")
+
     fun deliveryDate(date: String, daysToGo: Int?, lang: String): String {
         val days = daysToGo?.let { pick(lang, " ($it days to go)", " ($it दिन बाकी हैं)", " ($it din baaki)") } ?: ""
         return pick(lang,
@@ -149,6 +174,16 @@ internal object P {
             "आपकी डिलीवरी की तारीख $date है$days।",
             "Aapki delivery date $date hai$days.")
     }
+
+    fun nextAppointment(date: String, time: String, doctor: String, lang: String) = pick(lang,
+        "Your next appointment is with $doctor on $date at $time.",
+        "आपकी अगली अपॉइंटमेंट $doctor के साथ $date को $time बजे है।",
+        "Aapki agali appointment $doctor ke saath $date ko $time baje hai.")
+
+    fun noAppointments(lang: String) = pick(lang,
+        "Currently, there are no upcoming appointments. Would you like to schedule one?",
+        "फिलहाल अभी कोई अपॉइंटमेंट नहीं है। क्या आप अपॉइंटमेंट सेट करना चाहती हैं?",
+        "Filhal abhi koi appointment nahi hai. Kya aap appointment set karna chahti hain?")
 
     fun todaySchedule(items: List<String>, lang: String): String {
         if (items.isEmpty()) return pick(lang,
@@ -189,6 +224,11 @@ internal object P {
         "ठीक है, रुक रही हूँ। दोबारा उपयोग करने के लिए माइक पर टैप करें।",
         "Theek hai, ruk rahi hoon. Dobara use karne ke liye mic par tap kijiye.")
 
+    fun anythingElse(lang: String) = pick(lang,
+        "Anything else I can help you with?",
+        "क्या मैं आपकी किसी और चीज़ में मदद कर सकती हूँ?",
+        "Kya main aapki kisi aur cheez mein madad kar sakti hoon?")
+
     fun featureName(intent: VoiceIntentType, lang: String): String = when (intent) {
         // Hinglish reuses the English loanword (omitted hinglish arg → defaults to English label).
         VoiceIntentType.HOME -> pick(lang, "Home", "होम")
@@ -209,12 +249,17 @@ internal object P {
         VoiceIntentType.BABY_PROGRESS -> pick(lang, "Baby progress", "बच्चे की ग्रोथ")
         VoiceIntentType.BABY_WEIGHT -> pick(lang, "Baby weight", "बच्चे का वजन")
         VoiceIntentType.BABY_SIZE -> pick(lang, "Baby size", "बच्चे का साइज")
+        VoiceIntentType.BABY_LENGTH -> pick(lang, "Baby length", "बच्चे की लंबाई")
         VoiceIntentType.PREGNANCY_WEEK -> pick(lang, "Pregnancy week", "प्रेगनेंसी हफ्ता")
         VoiceIntentType.DELIVERY_DATE -> pick(lang, "Delivery date", "डिलीवरी डेट")
         VoiceIntentType.TODAY_SCHEDULE -> pick(lang, "Today's schedule", "आज का शेड्यूल")
         VoiceIntentType.HEALTH -> pick(lang, "Health", "हेल्थ")
         VoiceIntentType.QUICK_ACTIONS -> pick(lang, "Quick actions", "क्विक एक्शन")
         VoiceIntentType.HELP_SUPPORT -> pick(lang, "Help & support", "मदद")
+        VoiceIntentType.KICK_COUNT -> pick(lang, "Kick counter", "किक काउंटर")
+        VoiceIntentType.WATER_INTAKE -> pick(lang, "Water tracker", "पानी")
+        VoiceIntentType.EMERGENCY -> pick(lang, "Emergency SOS", "इमरजेंसी")
+        VoiceIntentType.MOTIVATION -> pick(lang, "Daily quote", "विचार")
         VoiceIntentType.UNKNOWN -> pick(lang, "Home", "होम")
     }
 }

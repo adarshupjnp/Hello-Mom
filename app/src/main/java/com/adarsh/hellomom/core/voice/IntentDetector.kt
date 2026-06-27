@@ -149,6 +149,10 @@ class IntentDetector @Inject constructor() {
                 "baby size", "baby kitna bada hai", "baby size batao", "size of baby",
                 "साइज", "बच्चे का साइज", "baby size bato"
             ),
+            VoiceIntentType.BABY_LENGTH to listOf(
+                "baby length", "baby lambai", "baby height", "baby kitna lamba hai",
+                "lambai", "length", "height", "बच्चे की लंबाई", "लंबाई", "baby length batao"
+            ),
             VoiceIntentType.PREGNANCY_WEEK to listOf(
                 "week", "current week", "kaun sa week", "kon sa week", "week progress",
                 "week batao", "pregnancy week", "सप्ताह", "कौन सा हफ्ता", "week bato"
@@ -163,6 +167,22 @@ class IntentDetector @Inject constructor() {
             ),
             VoiceIntentType.HELP_SUPPORT to listOf(
                 "help", "support", "help and support", "madad", "सहायता", "मदद"
+            ),
+            VoiceIntentType.KICK_COUNT to listOf(
+                "kick", "log kick", "felt a kick", "kick record karo", "bacche ne laat mari",
+                "kik", "kicks", "किक", "बच्चे की हलचल", "किक रिकॉर्ड करो"
+            ),
+            VoiceIntentType.WATER_INTAKE to listOf(
+                "water", "log water", "drank water", "pani piya", "ek glass pani",
+                "pani add karo", "पानी", "एक गिलास पानी", "पानी रिकॉर्ड करो"
+            ),
+            VoiceIntentType.EMERGENCY to listOf(
+                "emergency", "sos", "call ambulance", "ambulance ko phone karo",
+                "102", "इमरजेंसी", "एम्बुलेंस", "मदद चाहिए"
+            ),
+            VoiceIntentType.MOTIVATION to listOf(
+                "motivation", "quote", "daily quote", "vichar", "suvichar", "motivate me",
+                "आज का विचार", "प्रेरणा", "quote sunao"
             ),
             VoiceIntentType.HOME to listOf(
                 "home", "dashboard", "main screen", "ghar", "home kholo", "होम", "डैशबोर्ड"

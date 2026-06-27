@@ -61,6 +61,7 @@ class VoiceAssistantViewModel @Inject constructor(
     private val foodRepository: FoodRepository,
     private val reminderRepository: ReminderRepository,
     private val scheduleRepository: ScheduleRepository,
+    private val dashboardRepository: DashboardRepository,
     private val micVisibilityController: MicVisibilityController
 ) : BaseViewModel<VoiceAssistantIntent, VoiceAssistantState, VoiceAssistantEffect>() {
 
@@ -254,7 +255,7 @@ class VoiceAssistantViewModel @Inject constructor(
 
     /** No usable speech within the listen window (or a hard recognizer error). */
     private fun onNoResponse(reason: String) {
-        Log.d("VoiceAssistant", "onNoResponse: $reason welcomeSession=$welcomeSession awaitingConfirmation=$awaitingConfirmation")
+        Log.d("VoiceAssistant", "onNoResponse: $reason welcomeSession=$welcomeSession awaitingConfirmation=$awaitingConfirmation status=${uiState.value.status}")
         // After the welcome greeting, silence → a polite goodbye (not the generic fallback).
         if (welcomeSession) {
             welcomeSession = false
@@ -262,6 +263,15 @@ class VoiceAssistantViewModel @Inject constructor(
             else say(P.goodbye(lang()), VoiceStatus.IDLE)
             return
         }
+        
+        // If the assistant just opened a screen and asked "Anything else?", but the user stayed 
+        // silent -> auto-navigate back to Home/Dashboard so the user doesn't have to tap Back.
+        if (uiState.value.status == VoiceStatus.FOLLOW_UP) {
+            navigate("home")
+            say(P.goodbye(lang()), VoiceStatus.IDLE)
+            return
+        }
+
         // No answer to a "did you mean X?" suggestion → treat as declined.
         if (awaitingConfirmation) {
             awaitingConfirmation = false
@@ -296,6 +306,7 @@ class VoiceAssistantViewModel @Inject constructor(
     private fun onTranscript(text: String) {
         Log.d("VoiceAssistant", "USER_SAYS: $text")
         welcomeSession = false // the user responded — no goodbye needed
+        val statusBefore = uiState.value.status
         setState { copy(transcript = text, status = VoiceStatus.PROCESSING) }
         val normalized = normalizer.normalize(text)
         if (normalized.isBlank()) { handleMiss(); return }
@@ -303,6 +314,12 @@ class VoiceAssistantViewModel @Inject constructor(
         if (isCancelPhrase(normalized)) { cancelByUser(); return }
 
         if (awaitingConfirmation) { handleConfirmation(normalized); return }
+        
+        // If we just asked "Anything else?" and the user says no/nothing -> close session.
+        if (statusBefore == VoiceStatus.FOLLOW_UP && isNo(normalized)) {
+            say(P.goodbye(lang()), VoiceStatus.IDLE)
+            return
+        }
 
         val active = dialogue
         if (active != null) continueDialogue(active, normalized) else newCommand(normalized)
@@ -345,7 +362,16 @@ class VoiceAssistantViewModel @Inject constructor(
 
     private fun route(intent: VoiceIntentType, rawAction: VoiceActionType, result: VoiceCommandResult) {
         attempts = 0 // a confident command was understood — clear the miss counter
-        if (intent in STATUS_INTENTS) {
+
+        // Emergency is immediate and doesn't require the dashboard state/ownership check.
+        if (intent == VoiceIntentType.EMERGENCY) {
+            resetDialogue()
+            say(P.emergencyDialing(lang()), VoiceStatus.IDLE)
+            setEffect { VoiceAssistantEffect.DialEmergency }
+            return
+        }
+
+        if (intent in STATUS_INTENTS && rawAction != VoiceActionType.CREATE) {
             handleStatusIntent(intent)
             return
         }
@@ -353,8 +379,26 @@ class VoiceAssistantViewModel @Inject constructor(
         if (action == VoiceActionType.CREATE || action == VoiceActionType.UPDATE || action == VoiceActionType.DELETE) {
             viewModelScope.launch {
                 if (!resolveIsOwner()) { say(P.notAuthorized(lang()), VoiceStatus.IDLE); return@launch }
-                if (action == VoiceActionType.CREATE) startCreate(intent, result)
-                else openOrSearch(intent, VoiceActionType.OPEN, result) // update/delete handled on-screen
+                if (action == VoiceActionType.CREATE) {
+                    when (intent) {
+                        VoiceIntentType.KICK_COUNT -> {
+                            val userId = roleManager.resolveAccess().user?.userId.orEmpty()
+                            dashboardRepository.incrementKickCount(userId)
+                            val count = dashboardRepository.getDailyKickCount(userId).first()
+                            sayAndAskMore(P.kickLogged(count, lang()))
+                        }
+                        VoiceIntentType.WATER_INTAKE -> {
+                            val userId = roleManager.resolveAccess().user?.userId.orEmpty()
+                            val health = dashboardRepository.getMotherHealthData(userId).first()
+                            val newGlasses = health.waterIntake + 1
+                            dashboardRepository.updateMotherHealthData(userId, health.copy(waterIntake = newGlasses))
+                            sayAndAskMore(P.waterLogged(newGlasses, lang()))
+                        }
+                        else -> startCreate(intent, result)
+                    }
+                } else {
+                    openOrSearch(intent, VoiceActionType.OPEN, result)
+                }
             }
         } else {
             openOrSearch(intent, action, result)
@@ -416,22 +460,22 @@ class VoiceAssistantViewModel @Inject constructor(
             VoiceIntentType.MEDICINE -> {
                 prefillStore.putMedicine(VoicePrefillStore.MedicinePrefill(result.medicineName, result.frequency))
                 navigate("add_medicine")
-                say(P.medicineCreated(result.medicineName, result.time, lang()), VoiceStatus.IDLE)
+                sayAndAskMore(P.medicineCreated(result.medicineName, result.time, lang()))
             }
             VoiceIntentType.REMINDERS -> {
                 prefillStore.putReminder(VoicePrefillStore.ReminderPrefill(result.query, fireTimeMillis(result)))
                 navigate("add_reminder")
-                say(P.reminderCreated(result.query, result.time, lang()), VoiceStatus.IDLE)
+                sayAndAskMore(P.reminderCreated(result.query, result.time, lang()))
             }
             VoiceIntentType.APPOINTMENT -> {
                 prefillStore.requestAutoOpenAdd(VoiceIntentType.APPOINTMENT)
                 navigate("appointment")
-                say(P.appointmentCreated(result.date, result.doctorName, lang()), VoiceStatus.IDLE)
+                sayAndAskMore(P.appointmentCreated(result.date, result.doctorName, lang()))
             }
             else -> {
                 prefillStore.requestAutoOpenAdd(intent)
                 navigate(listRoute(intent))
-                say(P.genericAddOpened(featureName(intent, lang()), lang()), VoiceStatus.IDLE)
+                sayAndAskMore(P.genericAddOpened(featureName(intent, lang()), lang()))
             }
         }
     }
@@ -445,7 +489,7 @@ class VoiceAssistantViewModel @Inject constructor(
         val name = featureName(intent, lang())
         val msg = if (action == VoiceActionType.SEARCH) P.searching(name, result.query, lang())
         else P.opening(name, lang())
-        say(msg, VoiceStatus.IDLE)
+        sayAndAskMore(msg)
     }
 
     private fun tabIndexFor(intent: VoiceIntentType): Int? = when (intent) {
@@ -463,10 +507,15 @@ class VoiceAssistantViewModel @Inject constructor(
             val week = PregnancyProgress.week(start)
             val day = PregnancyProgress.dayOfWeek(start)
             val data = PregnancyDataEngine.getWeekData(week)
+            val targetUserId = access.activeUserId.ifEmpty { user?.userId.orEmpty() }
 
             val msg = when (intent) {
+                VoiceIntentType.BABY_PROGRESS -> {
+                    P.babyFullProgress(week, day, data.babySize, data.babyWeight, data.babyLength, data.weeklyMilestone, lang())
+                }
                 VoiceIntentType.BABY_WEIGHT -> P.babyWeight(data.babyWeight, lang())
                 VoiceIntentType.BABY_SIZE -> P.babySize(data.babySize, lang())
+                VoiceIntentType.BABY_LENGTH -> P.babyLength(data.babyLength, lang())
                 VoiceIntentType.PREGNANCY_WEEK -> P.pregnancyWeek(week, day, lang())
                 VoiceIntentType.DELIVERY_DATE -> {
                     val due = user?.dueDate
@@ -476,7 +525,6 @@ class VoiceAssistantViewModel @Inject constructor(
                 }
                 VoiceIntentType.TODAY_SCHEDULE -> {
                     val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                    val targetUserId = access.activeUserId.ifEmpty { user?.userId.orEmpty() }
                     val meds = medicineRepository.getMedicines(targetUserId).first()
                     val meals = foodRepository.getMeals(targetUserId).first()
                     val statuses = scheduleRepository.getDailyStatuses(targetUserId, today).first()
@@ -486,18 +534,45 @@ class VoiceAssistantViewModel @Inject constructor(
                     val pendingItems = buildPendingScheduleList(meds, meals, statuses, reminders)
                     P.todaySchedule(pendingItems, lang())
                 }
+                VoiceIntentType.MOTIVATION -> {
+                    val dayOfWeek = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
+                    when (dayOfWeek) {
+                        Calendar.MONDAY -> pickQuote("Starting a new week with a healthy body and a happy baby. ❤️", "एक नए हफ्ते की शुरुआत एक स्वस्थ शरीर और एक खुश बच्चे के साथ। ❤️", "Starting a new week with a healthy body and a happy baby. ❤️")
+                        Calendar.TUESDAY -> pickQuote("Every kick is a reminder that you're never alone in this journey. ✨", "हर किक इस बात की याद दिलाती है कि आप इस सफर में कभी अकेले नहीं हैं। ✨", "Every kick is a reminder that you're never alone in this journey. ✨")
+                        Calendar.WEDNESDAY -> pickQuote("Mid-week check: You're doing an amazing job, Mom! Stay strong. 💪", "मिड-वीक चेक: आप बहुत अच्छा काम कर रही हैं, मॉम! मजबूत बनी रहें। 💪", "Mid-week check: You're doing an amazing job, Mom! Stay strong. 💪")
+                        Calendar.THURSDAY -> pickQuote("Your baby is growing stronger every day, and so are you. 🌟", "आपका बच्चा हर दिन और मजबूत हो रहा है, और आप भी। 🌟", "Your baby is growing stronger every day, and so are you. 🌟")
+                        Calendar.FRIDAY -> pickQuote("Embrace the changes; your body is a miracle in progress. 🤰", "बदलावों को अपनाएं; आपका शरीर एक प्रगतिशील चमत्कार है। 🤰", "Embrace the changes; your body is a miracle in progress. 🤰")
+                        Calendar.SATURDAY -> pickQuote("Relax and bond with your little one this weekend. Peace is power. 🧘", "इस सप्ताहांत अपने नन्हे-मुन्ने के साथ आराम करें और जुड़ाव महसूस करें। शांति ही शक्ति है। 🧘", "Relax and bond with your little one this weekend. Peace is power. 🧘")
+                        Calendar.SUNDAY -> pickQuote("Rest well, Mom. Tomorrow is a new beginning for both of you. 🌙", "अच्छी तरह आराम करें, मॉम। कल आप दोनों के लिए एक नई शुरुआत है। 🌙", "Rest well, Mom. Tomorrow is a new beginning for both of you. 🌙")
+                        else -> pickQuote("Your baby is growing and so is your love. ❤️", "आपका बच्चा बढ़ रहा है और आपका प्यार भी। ❤️", "Your baby is growing and so is your love. ❤️")
+                    }
+                }
+                VoiceIntentType.KICK_COUNT -> {
+                    val kicks = dashboardRepository.getDailyKickCount(targetUserId).first()
+                    P.kickLogged(kicks, lang())
+                }
+                VoiceIntentType.WATER_INTAKE -> {
+                    val water = dashboardRepository.getMotherHealthData(targetUserId).first().waterIntake
+                    P.waterLogged(water, lang())
+                }
                 else -> ""
             }
 
             if (msg.isNotBlank()) {
                 // For status checks, we often want to see the relevant screen.
-                if (intent == VoiceIntentType.TODAY_SCHEDULE) navigate("home") // Or specific tab if supported
+                if (intent == VoiceIntentType.TODAY_SCHEDULE || intent == VoiceIntentType.MOTIVATION) navigate("home")
                 else navigate("baby_progress")
-                say(msg, VoiceStatus.IDLE)
+                sayAndAskMore(msg)
             } else {
                 fallback()
             }
         }
+    }
+
+    private fun pickQuote(en: String, hi: String, hinglish: String): String = when (lang()) {
+        "Hinglish" -> hinglish
+        "Hindi" -> hi
+        else -> en
     }
 
     private fun buildPendingScheduleList(
@@ -571,6 +646,11 @@ class VoiceAssistantViewModel @Inject constructor(
         return YES_WORDS.any { padded.contains(" $it ") }
     }
 
+    private fun isNo(n: String): Boolean {
+        val padded = " $n "
+        return NO_WORDS.any { padded.contains(" $it ") }
+    }
+
     /**
      * Maps a data question to the value the assistant should speak, or null if the utterance isn't
      * an info query. "baby"/value keywords answer even without a verb (no dedicated screen for them);
@@ -582,10 +662,14 @@ class VoiceAssistantViewModel @Inject constructor(
         return when {
             (n.contains("weight") || n.contains("vajan") || n.contains("वजन")) && (asks || baby) -> VoiceIntentType.BABY_WEIGHT
             (n.contains("size") || n.contains("साइज") || n.contains("aakar") || n.contains("kitna bada")) && (asks || baby) -> VoiceIntentType.BABY_SIZE
+            (n.contains("length") || n.contains("lambai") || n.contains("height") || n.contains("लंबाई")) && (asks || baby) -> VoiceIntentType.BABY_LENGTH
             n.contains("delivery") || n.contains("due date") || n.contains("डिलीवरी") -> VoiceIntentType.DELIVERY_DATE
             n.contains("trimester") || n.contains("ट्राइमेस्टर") -> VoiceIntentType.PREGNANCY_WEEK
             (n.contains("week") || n.contains("hafta") || n.contains("हफ्ता") || n.contains("सप्ताह")) && asks -> VoiceIntentType.PREGNANCY_WEEK
             (n.contains("schedule") || n.contains("shedyul") || n.contains("शेड्यूल")) && asks -> VoiceIntentType.TODAY_SCHEDULE
+            (n.contains("kick") || n.contains("kik") || n.contains("halchal") || n.contains("laat")) && (asks || baby) -> VoiceIntentType.KICK_COUNT
+            (n.contains("water") || n.contains("pani")) && asks -> VoiceIntentType.WATER_INTAKE
+            n.contains("quote") || n.contains("vichar") || n.contains("suvichar") || n.contains("motivation") -> VoiceIntentType.MOTIVATION
             else -> null
         }
     }
@@ -643,6 +727,30 @@ class VoiceAssistantViewModel @Inject constructor(
         setState { copy(message = text, status = status, suggestions = suggestions, awaitingSlot = null) }
     }
 
+    /**
+     * Speak the result [text], then immediately ask "Anything else?" and start listening again.
+     * This enables hands-free multi-turn conversations.
+     */
+    private fun sayAndAskMore(text: String) {
+        listenJob?.cancel()
+        val followUp = P.anythingElse(lang())
+        val combined = "$text $followUp"
+        setState { copy(message = combined, status = VoiceStatus.FOLLOW_UP) }
+        
+        var started = false
+        fun begin() {
+            if (started) return
+            started = true
+            beginListening()
+        }
+        
+        voice.speak(combined) { begin() }
+        listenJob = viewModelScope.launch {
+            delay(ttsDurationMs(combined) + LISTEN_WATCHDOG_MS)
+            if (!started) begin()
+        }
+    }
+
     private fun cancelByUser() {
         resetDialogue()
         say(P.cancelled(lang()), VoiceStatus.IDLE)
@@ -689,12 +797,17 @@ class VoiceAssistantViewModel @Inject constructor(
         VoiceIntentType.BABY_PROGRESS -> "baby_progress"
         VoiceIntentType.BABY_WEIGHT -> "baby_progress"
         VoiceIntentType.BABY_SIZE -> "baby_progress"
+        VoiceIntentType.BABY_LENGTH -> "baby_progress"
         VoiceIntentType.PREGNANCY_WEEK -> "baby_progress"
         VoiceIntentType.DELIVERY_DATE -> "baby_progress"
         VoiceIntentType.TODAY_SCHEDULE -> "home"
         VoiceIntentType.HEALTH -> "home"
         VoiceIntentType.QUICK_ACTIONS -> "home"
+        VoiceIntentType.KICK_COUNT -> "home"
+        VoiceIntentType.WATER_INTAKE -> "home"
         VoiceIntentType.HELP_SUPPORT -> "help_support"
+        VoiceIntentType.MOTIVATION -> "home"
+        VoiceIntentType.EMERGENCY -> "home"
         VoiceIntentType.UNKNOWN -> "home"
     }
 
@@ -727,17 +840,24 @@ class VoiceAssistantViewModel @Inject constructor(
             "haan", "han", "ha", "haanji", "ji", "ji haan", "theek", "theek hai", "thik", "thik hai", "sahi", "bilkul",
             "हाँ", "हां", "जी", "ठीक", "सही", "बिल्कुल"
         )
+        private val NO_WORDS = listOf(
+            "no", "nope", "nothing", "none", "nah", "stop", "exit", "close",
+            "nahi", "kuch nahi", "nahin", "bas", "hogaya", "ho gaya", "nhi",
+            "नहीं", "नहीं जी", "कुछ नहीं", "बस", "हो गया"
+        )
         private val CREATE_CAPABLE = setOf(
             VoiceIntentType.APPOINTMENT, VoiceIntentType.MEDICINE, VoiceIntentType.REMINDERS,
-            VoiceIntentType.SYMPTOM, VoiceIntentType.JOURNAL, VoiceIntentType.BILLING, VoiceIntentType.FOOD
+            VoiceIntentType.SYMPTOM, VoiceIntentType.JOURNAL, VoiceIntentType.BILLING, VoiceIntentType.FOOD,
+            VoiceIntentType.KICK_COUNT, VoiceIntentType.WATER_INTAKE
         )
         private val SEARCH_CAPABLE = setOf(
             VoiceIntentType.APPOINTMENT, VoiceIntentType.REPORTS, VoiceIntentType.MEDICINE, VoiceIntentType.BILLING
         )
         private val STATUS_INTENTS = setOf(
-            VoiceIntentType.BABY_WEIGHT, VoiceIntentType.BABY_SIZE,
+            VoiceIntentType.BABY_WEIGHT, VoiceIntentType.BABY_SIZE, VoiceIntentType.BABY_LENGTH,
             VoiceIntentType.PREGNANCY_WEEK, VoiceIntentType.DELIVERY_DATE,
-            VoiceIntentType.TODAY_SCHEDULE
+            VoiceIntentType.TODAY_SCHEDULE, VoiceIntentType.MOTIVATION,
+            VoiceIntentType.KICK_COUNT, VoiceIntentType.WATER_INTAKE
         )
         private val TOP = listOf(VoiceIntentType.APPOINTMENT, VoiceIntentType.REMINDERS, VoiceIntentType.MEDICINE, VoiceIntentType.REPORTS)
         private val CANCELS = listOf("cancel", "rehne do", "rehne de", "chodo", "cancel karo", "रहने दो", "रद्द")

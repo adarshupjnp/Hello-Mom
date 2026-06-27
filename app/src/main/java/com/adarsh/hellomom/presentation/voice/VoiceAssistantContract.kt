@@ -6,7 +6,7 @@ import com.adarsh.hellomom.core.UiState
 import com.adarsh.hellomom.core.voice.VoiceIntentType
 import com.adarsh.hellomom.core.voice.VoiceSlot
 
-enum class VoiceStatus { IDLE, LISTENING, PROCESSING, SPEAKING, AWAITING_SLOT, FALLBACK }
+enum class VoiceStatus { IDLE, LISTENING, PROCESSING, SPEAKING, AWAITING_SLOT, FOLLOW_UP, FALLBACK }
 
 sealed class VoiceAssistantIntent : UiIntent {
     /** Mic tapped (permission already granted) — open the panel and start listening. */
@@ -51,4 +51,6 @@ sealed class VoiceAssistantEffect : UiEffect {
     data class Navigate(val route: String) : VoiceAssistantEffect()
     /** Open the Home dashboard and select one of its tabs (e.g. Health, Quick). */
     data class NavigateToTab(val tabIndex: Int) : VoiceAssistantEffect()
+    /** Immediately open the dialer for emergency services (102). */
+    object DialEmergency : VoiceAssistantEffect()
 }
