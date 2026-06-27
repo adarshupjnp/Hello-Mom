@@ -56,7 +56,14 @@ class TextNormalizer @Inject constructor() {
             "lagaa" to "laga",
             "lagao" to "laga",
             "banaa" to "bana",
-            "banao" to "bana"
+            "banao" to "bana",
+            // Devanagari verbs → canonical latin tokens, so Hindi (hi-IN) transcriptions match the
+            // same dictionary phrases as their Hinglish spellings (e.g. "रिपोर्ट दिखाओ" → "… dikha").
+            "दिखाओ" to "dikha",
+            "बताओ" to "batao",
+            "खोलो" to "kholo",
+            "लगाओ" to "laga",
+            "बनाओ" to "bana"
         )
     }
 }

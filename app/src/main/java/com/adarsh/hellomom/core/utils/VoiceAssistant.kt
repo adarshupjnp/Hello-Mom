@@ -26,6 +26,9 @@ class VoiceAssistant @Inject constructor(
     // Runs once (on the main thread) when the current utterance finishes or errors, then clears.
     // Lets callers chain listening to the exact end of a spoken prompt instead of a fixed delay.
     @Volatile private var onUtteranceDone: (() -> Unit)? = null
+    // A speak() requested before TTS finished initialising (init is async). Replayed in onInit so the
+    // first greeting — and the listening it chains via onDone — never silently no-ops on a cold start.
+    @Volatile private var pendingSpeak: Pair<String, (() -> Unit)?>? = null
 
     init {
         tts = TextToSpeech(context, this)
@@ -40,6 +43,9 @@ class VoiceAssistant @Inject constructor(
                 override fun onError(utteranceId: String?) = fireUtteranceDone()
             })
             isTtsReady = true
+            // Flush any greeting/prompt requested before init completed (so it actually speaks now,
+            // and its onDone chain — e.g. begin listening — still fires).
+            pendingSpeak?.let { (text, cb) -> pendingSpeak = null; speak(text, cb) }
         }
     }
 
@@ -87,9 +93,9 @@ class VoiceAssistant @Inject constructor(
 
     private fun getLocaleFromPreferences(): Locale {
         val prefs = context.getSharedPreferences("hello_mom_prefs", Context.MODE_PRIVATE)
-        // Default Hinglish (matches PreferenceManager). Hinglish prompts are romanized, so they are
-        // spoken by the Indian-English (en-IN) voice — a Hindi voice can't read Latin script well.
-        val language = prefs.getString("selected_language", "Hinglish") ?: "Hinglish"
+        // Default Hindi (matches PreferenceManager) — Hindi prompts (Devanagari) read by the Hindi
+        // voice. Hinglish stays available (romanized text spoken by the Indian-English voice).
+        val language = prefs.getString("selected_language", "Hindi") ?: "Hindi"
         return when (language) {
             "Hindi" -> Locale("hi")
             "Hinglish" -> Locale("en", "IN")
@@ -105,17 +111,21 @@ class VoiceAssistant @Inject constructor(
      * greeting/prompt ends.
      */
     fun speak(text: String, onDone: (() -> Unit)? = null) {
-        if (isTtsReady) {
-            applyVoiceProfile() // Ensure language + young-female voice are correct before speaking.
-            onUtteranceDone = onDone
-            // Drop emojis/icons so TTS doesn't read them aloud (e.g. ❤️ as "dil").
-            tts?.speak(
-                sanitizeForSpeech(text),
-                TextToSpeech.QUEUE_FLUSH,
-                null,
-                if (onDone != null) UTTERANCE_ID else null
-            )
+        if (!isTtsReady) {
+            // TTS still initialising → remember this request and speak it the instant init completes,
+            // so a cold-start greeting (and any onDone chain, e.g. begin-listening) still runs.
+            pendingSpeak = text to onDone
+            return
         }
+        applyVoiceProfile() // Ensure language + young-female voice are correct before speaking.
+        onUtteranceDone = onDone
+        // Drop emojis/icons so TTS doesn't read them aloud (e.g. ❤️ as "dil").
+        tts?.speak(
+            sanitizeForSpeech(text),
+            TextToSpeech.QUEUE_FLUSH,
+            null,
+            if (onDone != null) UTTERANCE_ID else null
+        )
     }
 
     companion object {
@@ -126,8 +136,10 @@ class VoiceAssistant @Inject constructor(
     }
 
     fun stop() {
-        // Don't fire a pending completion callback when we deliberately stop (e.g. before listening).
+        // Don't fire a pending completion callback when we deliberately stop (e.g. before listening),
+        // and drop any greeting still queued behind TTS init so it can't replay over a user command.
         onUtteranceDone = null
+        pendingSpeak = null
         tts?.stop()
     }
 

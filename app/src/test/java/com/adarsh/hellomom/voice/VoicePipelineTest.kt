@@ -36,6 +36,17 @@ class VoicePipelineTest {
         assertTrue(intents.detect(norm("doctor appointment")).confidence >= 0.45f)
     }
 
+    @Test fun reported_commands_resolve_to_their_feature() {
+        // Regression for the "always samajh nahi aaya" report: these clean commands score 1.0 at the
+        // matcher — the failure was never here, it was the recognizer never delivering the transcript.
+        assertEquals(VoiceIntentType.REPORTS, intents.detect(norm("report dikhao")).intent)
+        assertEquals(VoiceIntentType.BILLING, intents.detect(norm("mujhe bills batao")).intent)
+        // With the default now Hindi (hi-IN), a verb may come back in Devanagari ("दिखाओ"); the new
+        // normalizer mappings collapse it onto the same latin token so the phrase still matches.
+        assertTrue(norm("रिपोर्ट दिखाओ").contains("dikha"))
+        assertEquals(VoiceIntentType.REPORTS, intents.detect(norm("रिपोर्ट दिखाओ")).intent)
+    }
+
     @Test fun action_detection() {
         assertEquals(VoiceActionType.CREATE, actions.detect(norm("30 june appointment add karo")))
         assertEquals(VoiceActionType.SEARCH, actions.detect(norm("blood report dikhao")))

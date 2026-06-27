@@ -171,6 +171,24 @@ internal object P {
         }
     }
 
+    /** Short greeting spoken when the user taps the mic mid-session (the long welcome plays only on app open). */
+    fun quickGreeting(name: String, lang: String): String {
+        val n = if (name.isNotBlank()) " $name" else ""
+        return pick(lang,
+            "Hey$n, how can I help you?",
+            "नमस्ते$n, मैं आपकी क्या मदद कर सकती हूँ?",
+            "Hey$n, main aapki kya madad kar sakti hoon?")
+    }
+
+    /**
+     * Short confirmation spoken when the user taps the mic to stop an in-progress reply or listen.
+     * Always ends by reminding how to start again — tap the mic.
+     */
+    fun stopped(lang: String) = pick(lang,
+        "Okay, stopping. Tap the mic to use it again.",
+        "ठीक है, रुक रही हूँ। दोबारा उपयोग करने के लिए माइक पर टैप करें।",
+        "Theek hai, ruk rahi hoon. Dobara use karne ke liye mic par tap kijiye.")
+
     fun featureName(intent: VoiceIntentType, lang: String): String = when (intent) {
         // Hinglish reuses the English loanword (omitted hinglish arg → defaults to English label).
         VoiceIntentType.HOME -> pick(lang, "Home", "होम")

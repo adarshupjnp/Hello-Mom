@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 import com.adarsh.hellomom.data.local.PreferenceManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -34,11 +35,12 @@ class SpeechRecognizerManager @Inject constructor(
     fun isAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
 
     /**
-     * Listen for a single utterance and return the best transcript. Runs the recognizer on the main
-     * thread (Android requirement) and always destroys it before returning, so it can be called
-     * again immediately for the next slot-filling turn.
+     * Listen for one utterance and return the recognizer's alternatives (best first, blanks dropped).
+     * Returning several candidates lets the caller pick the one that best matches a known command —
+     * far more robust in noisy surroundings than trusting only the top guess. Runs on the main thread
+     * (Android requirement) and always destroys the recognizer before returning, so it is re-armable.
      */
-    suspend fun listenOnce(): Result<String> = withContext(Dispatchers.Main) {
+    suspend fun listenOnce(): Result<List<String>> = withContext(Dispatchers.Main) {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             return@withContext Result.failure(VoiceInputException("unavailable"))
         }
@@ -47,17 +49,26 @@ class SpeechRecognizerManager @Inject constructor(
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag())
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                // Give the user time to start/finish speaking (≈5s of silence before timeout) — hints
-                // the engine may honour; benefits the welcome's "wait then say goodbye" and slot-filling.
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 2000)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 5000)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 5000)
+                // Capture partial hypotheses. The Google recognizer sometimes fires a FINAL onResults
+                // that is EMPTY even though it clearly heard speech (onBeginningOfSpeech fired) — in
+                // that case we fall back to the last partial. This was why clearly-spoken commands
+                // came back blank → "no_match" → goodbye.
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                // Ask for several alternatives → the caller picks the best-matching one (noise robustness).
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+                // Deliberately NOT setting EXTRA_PREFER_OFFLINE: on devices where the offline language
+                // model isn't downloaded it makes recognition return NOTHING every time. Let the system
+                // choose offline/online — it's the same free, on-device Google recognizer either way.
+                // Finalise after ~2.5s of silence — the user's "stop for 2-3s, then reply" — long enough
+                // not to cut someone off mid-sentence. No MINIMUM_LENGTH floor (it only added latency).
+                // (Hints the engine may honour.)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2500)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2500)
             }
 
             var done = false
-            fun finish(result: Result<String>) {
+            var lastPartial: List<String> = emptyList()
+            fun finish(result: Result<List<String>>) {
                 if (done) return
                 done = true
                 runCatching { recognizer.destroy() }
@@ -65,26 +76,46 @@ class SpeechRecognizerManager @Inject constructor(
             }
 
             recognizer.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {}
-                override fun onBeginningOfSpeech() {}
+                override fun onReadyForSpeech(params: Bundle?) { Log.d("VoiceAssistant", "STT onReadyForSpeech") }
+                override fun onBeginningOfSpeech() { Log.d("VoiceAssistant", "STT onBeginningOfSpeech") }
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() {}
-                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onEndOfSpeech() { Log.d("VoiceAssistant", "STT onEndOfSpeech") }
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val partial = partialResults
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.map { it.trim() }
+                        ?.filter { it.isNotBlank() }
+                        .orEmpty()
+                    if (partial.isNotEmpty()) {
+                        lastPartial = partial
+                        Log.d("VoiceAssistant", "STT onPartialResults: $partial")
+                    }
+                }
                 override fun onEvent(eventType: Int, params: Bundle?) {}
 
                 override fun onResults(results: Bundle?) {
-                    val text = results
+                    val candidates = (results
                         ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        ?.firstOrNull()
-                        ?.trim()
-                        .orEmpty()
-                    if (text.isBlank()) finish(Result.failure(VoiceInputException("no_match")))
-                    else finish(Result.success(text))
+                        ?.map { it.trim() }
+                        ?.filter { it.isNotBlank() }
+                        .orEmpty())
+                        .ifEmpty { lastPartial } // recognizer sometimes finalises EMPTY → keep last partial
+                    Log.d("VoiceAssistant", "STT onResults → $candidates")
+                    if (candidates.isEmpty()) finish(Result.failure(VoiceInputException("no_match")))
+                    else finish(Result.success(candidates))
                 }
 
                 override fun onError(error: Int) {
-                    finish(Result.failure(VoiceInputException(errorReason(error))))
+                    // Some engines error out (NO_MATCH/TIMEOUT) AFTER delivering good partials — keep
+                    // what we heard rather than throwing it away.
+                    if (lastPartial.isNotEmpty()) {
+                        Log.d("VoiceAssistant", "STT onError code=$error → using last partial: $lastPartial")
+                        finish(Result.success(lastPartial))
+                    } else {
+                        Log.d("VoiceAssistant", "STT onError: code=$error (${errorReason(error)})")
+                        finish(Result.failure(VoiceInputException(errorReason(error))))
+                    }
                 }
             })
 
@@ -93,8 +124,12 @@ class SpeechRecognizerManager @Inject constructor(
                 runCatching { recognizer.destroy() }
             }
 
+            Log.d("VoiceAssistant", "STT startListening lang=${languageTag()} available=${SpeechRecognizer.isRecognitionAvailable(context)}")
             runCatching { recognizer.startListening(intent) }
-                .onFailure { finish(Result.failure(VoiceInputException("start_failed"))) }
+                .onFailure {
+                    Log.d("VoiceAssistant", "STT startListening threw: ${it.message}")
+                    finish(Result.failure(VoiceInputException("start_failed")))
+                }
         }
     }
 
