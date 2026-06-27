@@ -40,7 +40,8 @@ class LoginViewModel @Inject constructor(
             LoginIntent.OnForgotPasswordClicked -> setEffect { LoginEffect.NavigateToForgotPassword }
             is LoginIntent.OnResetPassword -> resetPassword(intent.email)
             LoginIntent.OnRegisterClicked -> setEffect { LoginEffect.NavigateToRegister }
-            is LoginIntent.OnWhatsAppNumberSubmitted -> submitWhatsAppNumber(intent.number)
+            is LoginIntent.OnWhatsAppNumberSubmitted -> submitWhatsAppNumber(intent.number, intent.role)
+            is LoginIntent.OnFamilyRoleChanged -> setState { copy(familyRole = intent.role) }
         }
     }
 
@@ -96,7 +97,14 @@ class LoginViewModel @Inject constructor(
                 // users whose number is already on file skip the prompt entirely.
                 if (user.mobileNumber.isBlank()) {
                     pendingGoogleUser = user
-                    setState { copy(isLoading = false, requiresWhatsAppNumber = true) }
+                    val isOwner = com.adarsh.hellomom.core.RoleManager.isOwnerUser(user.fullName, user.email)
+                    setState { 
+                        copy(
+                            isLoading = false, 
+                            requiresWhatsAppNumber = true,
+                            isOwnerCandidate = isOwner
+                        ) 
+                    }
                 } else {
                     navigateAfterAuth(user)
                 }
@@ -107,15 +115,24 @@ class LoginViewModel @Inject constructor(
         }
     }
 
-    private fun submitWhatsAppNumber(number: String) {
+    private fun submitWhatsAppNumber(number: String, role: String?) {
         val user = pendingGoogleUser ?: return
         if (!uiState.value.isWhatsAppNumberValid(number)) {
             setEffect { LoginEffect.ShowError("Enter a valid ${LoginState.WHATSAPP_NUMBER_LENGTH}-digit WhatsApp number") }
             return
         }
+        
+        if (!uiState.value.isOwnerCandidate && role.isNullOrBlank()) {
+            setEffect { LoginEffect.ShowError("Please select your relationship") }
+            return
+        }
+
         viewModelScope.launch {
             setState { copy(isLoading = true, error = null) }
-            val updatedUser = user.copy(mobileNumber = number)
+            val updatedUser = user.copy(
+                mobileNumber = number,
+                familyRole = if (uiState.value.isOwnerCandidate) null else role
+            )
             userRepository.updateUser(updatedUser)
                 .onSuccess {
                     pendingGoogleUser = null
@@ -124,7 +141,7 @@ class LoginViewModel @Inject constructor(
                 }
                 .onFailure { e ->
                     setState { copy(isLoading = false, error = e.message) }
-                    setEffect { LoginEffect.ShowError(e.message ?: "Failed to save WhatsApp number") }
+                    setEffect { LoginEffect.ShowError(e.message ?: "Failed to save details") }
                 }
         }
     }

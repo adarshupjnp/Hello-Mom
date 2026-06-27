@@ -146,7 +146,9 @@ fun LoginScreen(
 
     if (state.requiresWhatsAppNumber) {
         var whatsAppNumber by remember { mutableStateOf("") }
-        val isValid = state.isWhatsAppNumberValid(whatsAppNumber)
+        val isPhoneValid = state.isWhatsAppNumberValid(whatsAppNumber)
+        val isRoleValid = state.isOwnerCandidate || state.familyRole.isNotBlank()
+        
         AlertDialog(
             // Mandatory: cannot be dismissed by tapping outside or pressing back.
             onDismissRequest = { },
@@ -155,15 +157,14 @@ fun LoginScreen(
                 dismissOnClickOutside = false
             ),
             icon = { Icon(Icons.Default.Phone, contentDescription = null) },
-            title = { Text("Add your WhatsApp number") },
+            title = { Text("Complete your profile") },
             text = {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "Enter the mobile number linked to your WhatsApp. " +
-                            "Your family uses it to send invites and stay in sync, " +
-                            "so please make sure it's an active WhatsApp number."
+                        "Please provide your details to continue. " +
+                            "Your family uses your WhatsApp number to stay in sync."
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    
                     OutlinedTextField(
                         value = whatsAppNumber,
                         onValueChange = {
@@ -174,19 +175,57 @@ fun LoginScreen(
                         placeholder = { Text("10-digit mobile number") },
                         leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                        isError = whatsAppNumber.isNotEmpty() && !isValid,
-                        supportingText = if (whatsAppNumber.isNotEmpty() && !isValid) {
+                        isError = whatsAppNumber.isNotEmpty() && !isPhoneValid,
+                        supportingText = if (whatsAppNumber.isNotEmpty() && !isPhoneValid) {
                             { Text("Enter a valid ${LoginState.WHATSAPP_NUMBER_LENGTH}-digit number") }
                         } else null,
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    if (!state.isOwnerCandidate) {
+                        var expanded by remember { mutableStateOf(false) }
+                        val roles = listOf("Husband", "Brother", "Sister", "Caretaker", "Other")
+
+                        ExposedDropdownMenuBox(
+                            expanded = expanded,
+                            onExpandedChange = { expanded = !expanded },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = state.familyRole,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Relationship to Owner") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth(),
+                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                            )
+
+                            ExposedDropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false }
+                            ) {
+                                roles.forEach { role ->
+                                    DropdownMenuItem(
+                                        text = { Text(role) },
+                                        onClick = {
+                                            viewModel.sendIntent(LoginIntent.OnFamilyRoleChanged(role))
+                                            expanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
                 Button(
-                    enabled = isValid && !state.isLoading,
-                    onClick = { viewModel.sendIntent(LoginIntent.OnWhatsAppNumberSubmitted(whatsAppNumber)) }
+                    enabled = isPhoneValid && isRoleValid && !state.isLoading,
+                    onClick = { viewModel.sendIntent(LoginIntent.OnWhatsAppNumberSubmitted(whatsAppNumber, state.familyRole)) }
                 ) {
                     Text("Continue")
                 }

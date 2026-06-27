@@ -16,7 +16,8 @@ sealed class LoginIntent : UiIntent {
     object OnRegisterClicked : LoginIntent()
 
     /** Submitted from the mandatory WhatsApp-number prompt shown to Google sign-in users. */
-    data class OnWhatsAppNumberSubmitted(val number: String) : LoginIntent()
+    data class OnWhatsAppNumberSubmitted(val number: String, val role: String?) : LoginIntent()
+    data class OnFamilyRoleChanged(val role: String) : LoginIntent()
 }
 
 data class LoginState(
@@ -29,6 +30,8 @@ data class LoginState(
      * and family member has a number on file for invites and sync.
      */
     val requiresWhatsAppNumber: Boolean = false,
+    val isOwnerCandidate: Boolean = false,
+    val familyRole: String = "",
     val error: String? = null
 ) : UiState {
 
