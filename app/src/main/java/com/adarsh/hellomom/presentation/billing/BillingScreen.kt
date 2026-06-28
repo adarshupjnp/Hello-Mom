@@ -56,19 +56,20 @@ fun BillingScreen(
         uri?.let {
             val listToExport = if (pendingDownload != null) listOf(pendingDownload!!) else state.filteredBills
             val content = listToExport.map {
-                PdfExporter.PdfRow(
+                PdfExporter.BillingPdfRow(
                     date = sdf.format(Date(it.date)),
                     description = it.title,
-                    details = "₹${it.amount} (${it.category})"
+                    category = it.category,
+                    amount = it.amount
                 )
             }
-            PdfExporter.exportToPdf(
+            PdfExporter.exportBillingToPdf(
                 context = context,
                 uri = it,
-                title = if (pendingDownload != null) "Expense Details" else "Billing & Expenses Report",
                 userName = state.userName,
                 week = state.pregnancyWeek,
-                content = content
+                totalAmount = if (pendingDownload != null) pendingDownload!!.amount else state.totalExpense,
+                rows = content
             )
         }
         pendingDownload = null
@@ -234,7 +235,13 @@ fun AddBillDialog(
 ) {
     var title by remember { mutableStateOf(existing?.title ?: "") }
     var amount by remember { mutableStateOf(existing?.amount?.toString() ?: "") }
-    var category by remember { mutableStateOf(existing?.category ?: "Medicine") }
+    
+    val predefinedCategories = listOf("Medicine", "Doctor Fees", "Lab Tests", "Ultrasound Scan", "Baby Shopping", "Supplements", "Hospital Bills", "Other")
+    
+    // If editing and category isn't in predefined, it was a "Custom" one
+    val initialIsOther = existing != null && existing.category !in predefinedCategories.filter { it != "Other" }
+    var category by remember { mutableStateOf(if (initialIsOther) "Other" else existing?.category ?: "Medicine") }
+    var customCategory by remember { mutableStateOf(if (initialIsOther) existing?.category ?: "Other" else "Other") }
 
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = existing?.date ?: System.currentTimeMillis())
     var showDatePicker by remember { mutableStateOf(false) }
@@ -289,27 +296,53 @@ fun AddBillDialog(
                 )
 
                 Text(text = "Category", style = MaterialTheme.typography.labelLarge)
-                val categories = listOf("Medicine", "Doctor Fees", "Lab Tests", "Hospital Bills", "Other")
                 
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    categories.forEach { c ->
+                    predefinedCategories.forEach { c ->
                         FilterChip(
                             selected = category == c,
-                            onClick = { category = c },
+                            onClick = { 
+                                category = c
+                                if (c == "Other" && customCategory.isBlank()) {
+                                    customCategory = "Other"
+                                }
+                            },
                             label = { Text(c) }
                         )
                     }
                 }
+
+                if (category == "Other") {
+                    OutlinedTextField(
+                        value = customCategory,
+                        onValueChange = { customCategory = it },
+                        label = { Text("Enter Custom Category") },
+                        modifier = Modifier.fillMaxWidth(),
+                        isError = customCategory.isBlank(),
+                        supportingText = if (customCategory.isBlank()) {
+                            { Text("Custom category cannot be empty") }
+                        } else null,
+                        singleLine = true
+                    )
+                }
             }
         },
         confirmButton = {
-            Button(onClick = { 
-                onSave(title, amount.toDoubleOrNull() ?: 0.0, category, datePickerState.selectedDateMillis ?: System.currentTimeMillis()) 
-            }) { Text("Save") }
+            val finalCategory = if (category == "Other") customCategory.trim() else category
+            val isFormValid = title.isNotBlank() && 
+                             amount.toDoubleOrNull() != null && 
+                             (category != "Other" || customCategory.isNotBlank())
+
+            Button(
+                onClick = { 
+                    onSave(title, amount.toDoubleOrNull() ?: 0.0, finalCategory, datePickerState.selectedDateMillis ?: System.currentTimeMillis()) 
+                },
+                enabled = isFormValid
+            ) { Text("Save") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
