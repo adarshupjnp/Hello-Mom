@@ -173,6 +173,14 @@ class DashboardViewModel @Inject constructor(
                 val now = System.currentTimeMillis()
                 val startOfToday = startOfDayMillis()
 
+                // Ensure the weight in health section stays in sync with the profile weight.
+                // If health tracking weight is 0, use the profile weight.
+                val syncedHealth = if (health.weight == 0f && ownerUser?.weight != null && ownerUser.weight > 0f) {
+                    health.copy(weight = ownerUser.weight)
+                } else {
+                    health
+                }
+
                 DashboardState(
                     user = user,
                     ownerName = if (isFamily) (ownerUser?.fullName ?: "") else "",
@@ -182,7 +190,7 @@ class DashboardViewModel @Inject constructor(
                     pregnancyDay = day,
                     trimester = trimester,
                     weekData = weekData,
-                    healthData = health,
+                    healthData = syncedHealth,
                     kickCount = kicks,
                     appointments = appointments.filter { it.appointmentTime >= startOfToday }.sortedBy { it.appointmentTime },
                     medicines = meds

@@ -18,6 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import com.adarsh.hellomom.core.FcmTokenManager
 import com.adarsh.hellomom.core.utils.VoiceAssistant
 import com.adarsh.hellomom.data.local.PreferenceManager
+import com.adarsh.hellomom.data.worker.WaterAutoUpdateWorker
 import com.adarsh.hellomom.navigation.NavGraph
 import com.adarsh.hellomom.presentation.permission.PermissionGate
 import com.adarsh.hellomom.presentation.voice.VoiceAssistantOverlay
@@ -73,6 +74,9 @@ class MainActivity : ComponentActivity() {
 
         // Keep each user's FCM token saved in their Firestore doc (added/updated on change).
         firebaseAuth.addAuthStateListener(authListener)
+
+        // Schedule daily water intake auto-update at 7 PM
+        WaterAutoUpdateWorker.schedule(this)
 
         firebaseMessaging.token.addOnCompleteListener { task ->
             if (task.isSuccessful) {

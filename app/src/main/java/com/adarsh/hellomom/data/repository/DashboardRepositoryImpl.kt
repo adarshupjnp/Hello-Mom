@@ -18,6 +18,7 @@ class DashboardRepositoryImpl @Inject constructor(
     private val appointmentDao: AppointmentDao,
     private val medicineDao: MedicineDao,
     private val symptomDao: SymptomDao,
+    private val waterIntakeDao: WaterIntakeDao,
     private val familyMemberDao: FamilyMemberDao
 ) : DashboardRepository {
 
@@ -43,35 +44,71 @@ class DashboardRepositoryImpl @Inject constructor(
     }
 
     override fun getMotherHealthData(userId: String): Flow<MotherHealthData> = callbackFlow {
-        val subscription = firestore.collection("users").document(userId)
-            .collection("health_metrics").document("current")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
-                val data = snapshot?.toObject(MotherHealthData::class.java) ?: MotherHealthData()
-                trySend(data)
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        
+        var currentMetrics = MotherHealthData()
+        var currentWater = 0
+
+        fun emitCombined() {
+            trySend(currentMetrics.copy(waterIntake = currentWater))
+        }
+
+        // Listen to health metrics (steps, sleep, mood, weight)
+        val metricsSubscription = firestore.collection("users").document(userId)
+            .collection("health_metrics").document(today)
+            .addSnapshotListener { snapshot, _ ->
+                currentMetrics = snapshot?.toObject(MotherHealthData::class.java) ?: MotherHealthData()
+                emitCombined()
             }
-        awaitClose { subscription.remove() }
+
+        // Listen to water intake (to keep synchronized with Nutrition screen)
+        val waterSubscription = firestore.collection("users").document(userId)
+            .collection("water_intake").document(today)
+            .addSnapshotListener { snapshot, _ ->
+                currentWater = snapshot?.getLong("glassesDrank")?.toInt() ?: 0
+                emitCombined()
+            }
+
+        awaitClose { 
+            metricsSubscription.remove()
+            waterSubscription.remove()
+        }
     }
-        // Emit a default up-front so the dashboard's combine() never blocks waiting on this
-        // Firestore listener — a fresh, offline family login would otherwise hang on an infinite
-        // shimmer because the snapshot may not arrive until the network is back.
         .onStart { emit(MotherHealthData()) }
         .catch { emit(MotherHealthData()) }
 
     override suspend fun updateMotherHealthData(userId: String, healthData: MotherHealthData): Result<Unit> {
         return try {
+            val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+            
+            // 1. Update health metrics (excluding waterIntake which has its own source of truth)
             firestore.collection("users").document(userId)
-                .collection("health_metrics").document("current")
+                .collection("health_metrics").document(today)
                 .set(healthData).await()
-            SyncLogger.firebaseWrite("UPDATE health", "users/$userId/health_metrics/current", "mood=${healthData.mood} water=${healthData.waterIntake} weight=${healthData.weight} sleep=${healthData.sleepHours} steps=${healthData.steps}")
+            
+            // 2. Update water intake in its dedicated collection to keep Nutrition screen in sync
+            val waterIntake = WaterIntakeEntity(
+                date = today,
+                userId = userId,
+                glassesDrank = healthData.waterIntake
+            )
+            firestore.collection("users").document(userId)
+                .collection("water_intake").document(today).set(waterIntake).await()
+            
+            // 3. Update the weight in the root user document
+            if (healthData.weight > 0f) {
+                firestore.collection("users").document(userId)
+                    .update("weight", healthData.weight).await()
+            }
+
+            SyncLogger.firebaseWrite("UPDATE health+water", "users/$userId/health_metrics/$today", "water=${healthData.waterIntake} steps=${healthData.steps}")
             Result.success(Unit)
         } catch (e: Exception) {
             SyncLogger.error("UPDATE health failed userId=$userId", e)
             Result.failure(e)
         }
     }
-
-    override fun getDailyKickCount(userId: String): Flow<Int> = callbackFlow {
+  override fun getDailyKickCount(userId: String): Flow<Int> = callbackFlow {
         val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
         val subscription = firestore.collection("users").document(userId)
             .collection("kicks").document(today)

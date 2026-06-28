@@ -184,7 +184,21 @@ fun ReminderListScreen(
                 // user is never confused by cards jumping around. Applies equally to predefined
                 // (auto) and manually added reminders since both share this single list.
                 // (familyReminders is already time-sorted by the ViewModel.)
+                val todayStart = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+
+                val hasOlderReminders = selectedDate == null && familyReminders.any { it.time < todayStart }
+
                 items(familyReminders, key = { it.id }) { reminder ->
+                    if (selectedDate == null) {
+                        // Check if this is the first reminder older than today to show partition
+                        val index = familyReminders.indexOf(reminder)
+                        if (index > 0 && reminder.time < todayStart && familyReminders[index - 1].time >= todayStart) {
+                            OlderRemindersHeader()
+                        }
+                    }
+
                     ReminderCard(
                         reminder = reminder,
                         isOwner = isOwner,
@@ -200,6 +214,40 @@ fun ReminderListScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun OlderRemindersHeader() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+        Surface(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text(
+                text = "Older Reminders",
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
     }
 }
 

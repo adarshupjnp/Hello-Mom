@@ -2,6 +2,7 @@ package com.adarsh.hellomom.core.constants
 
 object ReminderConstants {
     val DAILY_AUTO_REMINDERS = listOf(
+        PredefinedReminder("Morning Awake", "Good morning! It's 7 AM, time to wake up and start your beautiful day."),
         PredefinedReminder("Morning Medicine", "Good morning! It's time to take your morning medicine."),
         PredefinedReminder("Coconut Water", "Time for some refreshing coconut water. Stay hydrated!"),
         PredefinedReminder("Lunch Meal", "It's time for your healthy lunch. Eat well!"),
@@ -13,10 +14,10 @@ object ReminderConstants {
 
     /**
      * Fire time (hour of day, 24h, on the hour) for each entry in [DAILY_AUTO_REMINDERS], matched
-     * by index: 8AM, 9AM, 12PM, 4PM, 7PM, 8PM, 10PM. Single source of truth for daily generation.
+     * by index: 7AM, 8AM, 9AM, 12PM, 4PM, 7PM, 8PM, 10PM. Single source of truth for daily generation.
      * MUST stay the same length as [DAILY_AUTO_REMINDERS] (index-aligned).
      */
-    val DAILY_REMINDER_HOURS = listOf(8, 9, 12, 16, 19, 20, 22)
+    val DAILY_REMINDER_HOURS = listOf(7, 8, 9, 12, 16, 19, 20, 22)
 
     /** Daily auto-reminders (and any other reminder) are retained for this many days, then purged. */
     const val RETENTION_DAYS = 7
