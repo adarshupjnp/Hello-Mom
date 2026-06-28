@@ -107,6 +107,7 @@ dependencies {
     implementation(libs.credentials.play.auth)
     implementation(libs.google.id)
     implementation(libs.play.services.auth)
+    implementation(libs.play.services.location)
     implementation(libs.play.services.base)
     implementation(libs.play.services.basement)
 

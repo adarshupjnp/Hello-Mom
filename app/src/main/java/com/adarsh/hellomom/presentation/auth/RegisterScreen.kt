@@ -24,7 +24,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.adarsh.hellomom.navigation.Screen
 import com.adarsh.hellomom.presentation.components.LoadingButton
+import com.adarsh.hellomom.presentation.permission.PermissionGate
 import kotlinx.coroutines.flow.collectLatest
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,10 +43,28 @@ fun RegisterScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
+    
+    val context = LocalContext.current
+    val locationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result.values.any { it }
+        viewModel.sendIntent(RegisterIntent.OnLocationPermissionResult(granted))
+    }
 
     LaunchedEffect(key1 = true) {
         viewModel.effect.collectLatest { effect ->
             when (effect) {
+                is RegisterEffect.RequestLocation -> {
+                    val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                    val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                    
+                    if (hasFine || hasCoarse) {
+                        viewModel.sendIntent(RegisterIntent.OnLocationPermissionResult(true))
+                    } else {
+                        locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                    }
+                }
                 is RegisterEffect.NavigateToProfileCreation -> {
                     // Clear the entire auth stack so pressing back from ProfileCreation exits the app
                     navController.navigate(Screen.ProfileCreation.route) {

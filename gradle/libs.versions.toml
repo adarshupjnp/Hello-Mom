@@ -20,6 +20,7 @@ googleServices = "4.4.2"
 credentials = "1.3.0"
 googleid = "1.1.1"
 playServicesAuth = "21.5.1"
+playServicesLocation = "21.3.0"
 playServicesBase = "18.10.0"
 playServicesBasement = "18.10.0"
 mlkitTextRecognition = "16.0.1"
@@ -80,6 +81,7 @@ credentials-core = { group = "androidx.credentials", name = "credentials", versi
 credentials-play-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
 google-id = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
 play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 play-services-base = { group = "com.google.android.gms", name = "play-services-base", version.ref = "playServicesBase" }
 play-services-basement = { group = "com.google.android.gms", name = "play-services-basement", version.ref = "playServicesBasement" }
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }

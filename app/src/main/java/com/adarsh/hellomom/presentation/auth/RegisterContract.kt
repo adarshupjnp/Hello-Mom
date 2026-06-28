@@ -14,6 +14,7 @@ sealed class RegisterIntent : UiIntent {
     data class OnFamilyRoleChanged(val role: String) : RegisterIntent()
     object OnRegisterClicked : RegisterIntent()
     object OnLoginClicked : RegisterIntent()
+    data class OnLocationPermissionResult(val granted: Boolean) : RegisterIntent()
 }
 
 data class RegisterState(
@@ -78,6 +79,7 @@ sealed class RegisterEffect : UiEffect {
     object NavigateToProfileCreation : RegisterEffect()
     object NavigateToHome : RegisterEffect()
     object NavigateToLogin : RegisterEffect()
+    object RequestLocation : RegisterEffect()
     data class ShowError(val message: String) : RegisterEffect()
     data class ShowSuccess(val message: String) : RegisterEffect()
 }

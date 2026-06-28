@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import com.adarsh.hellomom.core.BaseViewModel
 import com.adarsh.hellomom.core.RoleManager
 import com.adarsh.hellomom.core.utils.SyncLogger
+import com.adarsh.hellomom.core.utils.LocationProvider
 import com.adarsh.hellomom.data.local.entity.*
 import com.adarsh.hellomom.domain.repository.*
 import com.adarsh.hellomom.core.utils.PregnancyDataEngine
@@ -22,7 +23,8 @@ class DashboardViewModel @Inject constructor(
     private val reminderRepository: ReminderRepository,
     private val syncRepository: SyncRepository,
     private val scheduleRepository: ScheduleRepository,
-    private val roleManager: RoleManager
+    private val roleManager: RoleManager,
+    private val locationProvider: LocationProvider
 ) : BaseViewModel<DashboardIntent, DashboardState, DashboardEffect>() {
 
     private val todayDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
@@ -92,6 +94,9 @@ class DashboardViewModel @Inject constructor(
             )
 
             setState { copy(user = user, hasFullAccess = hasFullAccess) }
+
+            // Update user location on app open if it has changed
+            updateUserLocation(user)
 
             // Family members: attach a real-time Firestore mirror so any owner change (add / edit /
             // delete / mark done / mark pending) lands in Room — and therefore on screen — instantly,
@@ -244,6 +249,25 @@ class DashboardViewModel @Inject constructor(
             return null
         }
         return uiState.value.user?.userId
+    }
+
+    private fun updateUserLocation(currentUser: UserEntity) {
+        viewModelScope.launch {
+            val location = locationProvider.getCurrentLocation() ?: return@launch
+            
+            val isSameLocation = currentUser.latitude == location.latitude && 
+                                currentUser.longitude == location.longitude
+            
+            if (!isSameLocation) {
+                val updatedUser = currentUser.copy(
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    locationUpdatedAt = System.currentTimeMillis()
+                )
+                userRepository.updateUser(updatedUser)
+                SyncLogger.info("User location updated: lat=${location.latitude}, lon=${location.longitude}")
+            }
+        }
     }
 
     private fun incrementKicks() {

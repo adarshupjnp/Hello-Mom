@@ -30,6 +30,11 @@ data class UserEntity(
     /** Daily routine sleep time for Today's Schedule, e.g. "10:00 PM" (owner-configurable). */
     val sleepTime: String? = null,
 
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val locationUpdatedAt: Long? = null,
+    val userRole: String? = null, // "OWNER" or "FAMILY"
+
     val syncStatus: SyncStatus = SyncStatus.PENDING,
     val updatedAt: Long = System.currentTimeMillis(),
     val lastSyncedAt: Long? = null,

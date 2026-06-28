@@ -13,20 +13,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -36,17 +32,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 
 /**
- * Drives the app's required runtime permissions with clear, insistent UI:
+ * Drives the app's mandatory runtime permissions (Location, Notifications, Audio, Camera) 
+ * with a persistent UI that checks and prompts the user every time the app opens.
  *
- *  1. Notifications (Android 13+) — requested via the system dialog on first launch. If denied, a
- *     blocking explanation dialog appears stating why it's required and re-prompts; once the OS
- *     stops allowing the prompt (permanently denied) the same dialog routes the user to App Settings.
- *  2. Exact alarms (Android 12+) — can only be granted from a system Settings screen, so we first
- *     show an explanation popup (mirroring the notification prompt) and only then open that screen.
- *
- * Camera + microphone are still requested best-effort (used by chat / voice) but are not forced.
- * Permission state is re-checked on every ON_RESUME so the dialogs dismiss themselves the moment
- * the user comes back from Settings having granted access.
+ * For runtime permissions, it uses the system popup; if permanently denied, it shows 
+ * a rationale dialog leading to Settings. For the Exact Alarm permission (Android 12+), 
+ * it shows a rationale dialog first as it is a system settings toggle.
  */
 @Composable
 fun PermissionGate() {
@@ -54,104 +45,161 @@ fun PermissionGate() {
     val activity = context.findActivity()
     val lifecycleOwner = LocalLifecycleOwner.current
 
+    // Primary permission states
     var notifGranted by remember { mutableStateOf(hasNotificationPermission(context)) }
-    var requestingNotif by remember { mutableStateOf(false) }
-    var showNotifRationale by remember { mutableStateOf(false) }
+    var locationGranted by remember { mutableStateOf(hasLocationPermission(context)) }
+    var audioGranted by remember { mutableStateOf(hasAudioPermission(context)) }
+    var cameraGranted by remember { mutableStateOf(hasCameraPermission(context)) }
     var alarmGranted by remember { mutableStateOf(canScheduleExactAlarms(context)) }
-    // Bumped to trigger another system popup (the launcher can't be referenced inside its own
-    // result callback, so the re-request is routed through this tick + a LaunchedEffect).
-    var notifRequestTick by remember { mutableIntStateOf(0) }
 
-    // Best-effort (not forced) camera/microphone request.
-    val basicLauncher = rememberLauncherForActivityResult(
+    // Rationale dialog visibility (shown when system popup is exhausted)
+    var showNotifRationale by remember { mutableStateOf(false) }
+    var showLocationRationale by remember { mutableStateOf(false) }
+    var showAudioRationale by remember { mutableStateOf(false) }
+    var showCameraRationale by remember { mutableStateOf(false) }
+
+    // Tick-based triggers for re-evaluating and re-prompting missing permissions
+    var requestTick by remember { mutableIntStateOf(0) }
+    var requesting by remember { mutableStateOf(false) }
+
+    // Single launcher for all mandatory runtime permissions
+    val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { /* result ignored — these are optional */ }
+    ) { results ->
+        requesting = false
+        notifGranted = hasNotificationPermission(context)
+        locationGranted = hasLocationPermission(context)
+        audioGranted = hasAudioPermission(context)
+        cameraGranted = hasCameraPermission(context)
 
-    // Notifications use ONLY the system popup — no custom explanation dialog. If the user doesn't
-    // allow, we immediately re-show the SAME system popup again, as long as Android still permits it
-    // (shouldShowRequestPermissionRationale stays true until a permanent "don't ask again"). Never a
-    // rationale dialog or Settings redirect for notifications.
-    val notifLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        notifGranted = granted
-        requestingNotif = false
-        if (!granted && activity != null) {
-            if (ActivityCompat.shouldShowRequestPermissionRationale(
-                    activity, Manifest.permission.POST_NOTIFICATIONS
-                )
-            ) {
-                notifRequestTick++ // ask again right away (OS will still show the popup)
-            } else {
-                // System popup is permanently denied/blocked; show custom rationale instead
+        // Identify permissions that were denied and no longer show the system popup
+        if (activity != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && 
+                results[Manifest.permission.POST_NOTIFICATIONS] == false &&
+                !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.POST_NOTIFICATIONS)) {
                 showNotifRationale = true
+            }
+            if ((results[Manifest.permission.ACCESS_FINE_LOCATION] == false || results[Manifest.permission.ACCESS_COARSE_LOCATION] == false) &&
+                !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.ACCESS_FINE_LOCATION)) {
+                showLocationRationale = true
+            }
+            if (results[Manifest.permission.RECORD_AUDIO] == false &&
+                !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.RECORD_AUDIO)) {
+                showAudioRationale = true
+            }
+            if (results[Manifest.permission.CAMERA] == false &&
+                !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.CAMERA)) {
+                showCameraRationale = true
             }
         }
     }
 
-    LaunchedEffect(Unit) {
-        basicLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
-    }
+    // Automatically trigger system prompts for any missing permissions
+    LaunchedEffect(requestTick) {
+        if (requesting) return@LaunchedEffect
 
-    // Drives both the initial notification request (tick 0) and every re-request (tick++).
-    LaunchedEffect(notifRequestTick) {
-        if (!notifGranted && !requestingNotif &&
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-        ) {
-            requestingNotif = true
-            notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        val toRequest = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission(context)) {
+            toRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (!hasLocationPermission(context)) {
+            toRequest.add(Manifest.permission.ACCESS_FINE_LOCATION)
+            toRequest.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+        if (!hasAudioPermission(context)) {
+            toRequest.add(Manifest.permission.RECORD_AUDIO)
+        }
+        if (!hasCameraPermission(context)) {
+            toRequest.add(Manifest.permission.CAMERA)
+        }
+
+        if (toRequest.isNotEmpty()) {
+            requesting = true
+            launcher.launch(toRequest.toTypedArray())
         }
     }
 
-    // Re-check on resume; if notifications still aren't allowed, show the system popup AGAIN. The
-    // `requestingNotif` guard prevents launching while one prompt is already in flight, so a
-    // permanently-denied state can't spin into a loop. Also refreshes the exact-alarm state after
-    // the user returns from the alarm Settings screen.
+    // Re-check and re-trigger whenever the user returns to the app (e.g. from Settings)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 notifGranted = hasNotificationPermission(context)
+                locationGranted = hasLocationPermission(context)
+                audioGranted = hasAudioPermission(context)
+                cameraGranted = hasCameraPermission(context)
                 alarmGranted = canScheduleExactAlarms(context)
-                // If they came back from Settings and still haven't allowed, reset rationale 
-                // state so we can re-try the system popup or show the custom dialog again.
-                showNotifRationale = false 
-                if (!notifGranted && !requestingNotif &&
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                ) {
-                    requestingNotif = true
-                    notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
+
+                // Reset rationale states to allow the logic to re-trigger if needed
+                showNotifRationale = false
+                showLocationRationale = false
+                showAudioRationale = false
+                showCameraRationale = false
+
+                requestTick++
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // The explanatory dialog is shown ONLY for alarms/reminders (exact alarms have no runtime
-    // popup). Gated on notifGranted so it never stacks on top of the notification prompt.
-    if (notifGranted && !alarmGranted) {
-        RequiredPermissionDialog(
-            icon = Icons.Default.Alarm,
-            title = "Allow Alarms & Reminders",
-            message = "To deliver appointment and medicine reminders at the exact time, Hello Mom+ " +
-                "needs the \"Alarms & reminders\" permission. Tap Allow and enable it on the next " +
-                "screen — without it, reminders may be delayed or missed.",
-            confirmLabel = "Allow",
-            onConfirm = { context.openExactAlarmSettings() }
-        )
-    }
+    // --- SEQUENTIAL PERMISSION UI (Prevents dialog stacking) ---
+    when {
+        // 1. Mandatory Rationale: Notifications
+        !notifGranted && showNotifRationale -> {
+            RequiredPermissionDialog(
+                icon = Icons.Default.Notifications,
+                title = "Notifications Required",
+                message = "Hello Mom+ needs notification access to send you important pregnancy updates and reminders. Since this was previously denied, please enable it in App Settings to continue.",
+                confirmLabel = "Allow",
+                onConfirm = { context.openAppNotificationSettings() }
+            )
+        }
 
-    // Forceful notification rationale dialog shown once the system popup is exhausted.
-    if (!notifGranted && showNotifRationale) {
-        RequiredPermissionDialog(
-            icon = Icons.Default.Notifications,
-            title = "Notifications Required",
-            message = "Hello Mom+ needs notification access to send you important pregnancy " +
-                "updates and reminders. Since this was previously denied, please enable it in " +
-                "App Settings to continue.",
-            confirmLabel = "Allow",
-            onConfirm = { context.openAppNotificationSettings() }
-        )
+        // 2. Mandatory Rationale: Location
+        !locationGranted && showLocationRationale -> {
+            RequiredPermissionDialog(
+                icon = Icons.Default.LocationOn,
+                title = "Location Access Required",
+                message = "Hello Mom+ uses your location for family distance tracking and local health resources. Please enable location access in App Settings to continue.",
+                confirmLabel = "Allow",
+                onConfirm = { context.openAppNotificationSettings() }
+            )
+        }
+
+        // 3. Mandatory Rationale: Audio
+        !audioGranted && showAudioRationale -> {
+            RequiredPermissionDialog(
+                icon = Icons.Default.Mic,
+                title = "Microphone Access Required",
+                message = "Microphone access is required for your AI voice assistant. Please enable microphone access in App Settings to continue.",
+                confirmLabel = "Allow",
+                onConfirm = { context.openAppNotificationSettings() }
+            )
+        }
+
+        // 4. Mandatory Rationale: Camera
+        !cameraGranted && showCameraRationale -> {
+            RequiredPermissionDialog(
+                icon = Icons.Default.CameraAlt,
+                title = "Camera Access Required",
+                message = "Camera access is required for report scanning and AI features. Please enable camera access in App Settings to continue.",
+                confirmLabel = "Allow",
+                onConfirm = { context.openAppNotificationSettings() }
+            )
+        }
+
+        // 5. Alarms & Reminders (Restored previous logic exactly)
+        notifGranted && !alarmGranted -> {
+            RequiredPermissionDialog(
+                icon = Icons.Default.Alarm,
+                title = "Allow Alarms & Reminders",
+                message = "To deliver appointment and medicine reminders at the exact time, Hello Mom+ " +
+                    "needs the \"Alarms & reminders\" permission. Tap Allow and enable it on the next " +
+                    "screen — without it, reminders may be delayed or missed.",
+                confirmLabel = "Allow",
+                onConfirm = { context.openExactAlarmSettings() }
+            )
+        }
     }
 }
 
@@ -164,7 +212,6 @@ private fun RequiredPermissionDialog(
     onConfirm: () -> Unit
 ) {
     AlertDialog(
-        // Empty handler => not dismissable by outside-tap or back press: the permission is required.
         onDismissRequest = { },
         icon = { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         title = { Text(title) },
@@ -181,6 +228,16 @@ private fun hasNotificationPermission(context: Context): Boolean =
             context, Manifest.permission.POST_NOTIFICATIONS
         ) == PackageManager.PERMISSION_GRANTED
 
+private fun hasLocationPermission(context: Context): Boolean =
+    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+private fun hasAudioPermission(context: Context): Boolean =
+    ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+private fun hasCameraPermission(context: Context): Boolean =
+    ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+
 private fun canScheduleExactAlarms(context: Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
     val am = context.getSystemService(AlarmManager::class.java)
@@ -194,7 +251,6 @@ private fun Context.openExactAlarmSettings() {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     runCatching { startActivity(intent) }.onFailure {
-        // Fallback to the app's details page if the dedicated screen isn't available.
         openAppNotificationSettings()
     }
 }

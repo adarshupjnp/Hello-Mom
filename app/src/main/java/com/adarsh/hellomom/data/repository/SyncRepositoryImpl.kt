@@ -589,13 +589,42 @@ class SyncRepositoryImpl @Inject constructor(
     }.getOrNull()
 
     /**
-     * Prefer the remote record, but retain a locally-stored profile picture URI when the remote
-     * copy doesn't have one (pictures are kept as local URIs, see [UserRepositoryImpl]).
+     * Prefer the remote record, but retain local-only state:
+     * 1. Profile picture URI (kept local, see [UserRepositoryImpl]).
+     * 2. Fresher location data (compare timestamps).
      */
     private fun mergeUser(remote: UserEntity?, local: UserEntity?): UserEntity? {
         if (remote == null) return local
-        return if (local?.profilePicture != null && remote.profilePicture == null) {
-            remote.copy(profilePicture = local.profilePicture)
-        } else remote
+        if (local == null) return remote
+
+        var merged = remote
+
+        // Retain local-only fields if remote doesn't have them
+        if (local.profilePicture != null && remote.profilePicture == null) {
+            merged = merged.copy(profilePicture = local.profilePicture)
+        }
+
+        // Location: source of truth is the current device, but if remote has a newer 
+        // timestamp, we should consider it (e.g. if updated from another device).
+        val remoteLocTime = remote.locationUpdatedAt ?: 0L
+        val localLocTime = local.locationUpdatedAt ?: 0L
+        
+        if (localLocTime > remoteLocTime) {
+            merged = merged.copy(
+                latitude = local.latitude,
+                longitude = local.longitude,
+                locationUpdatedAt = local.locationUpdatedAt
+            )
+        }
+        
+        // Always retain local-only fields that are NOT in UserEntity but could be in the future
+        // For now, ensure userRole is also synced correctly if remote has it
+        if (remote.userRole != null) {
+            merged = merged.copy(userRole = remote.userRole)
+        } else if (local.userRole != null) {
+            merged = merged.copy(userRole = local.userRole)
+        }
+
+        return merged
     }
 }

@@ -4,13 +4,15 @@ import androidx.lifecycle.viewModelScope
 import com.adarsh.hellomom.core.BaseViewModel
 import com.adarsh.hellomom.data.local.entity.UserEntity
 import com.adarsh.hellomom.domain.repository.AuthRepository
+import com.adarsh.hellomom.core.utils.LocationProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class RegisterViewModel @Inject constructor(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val locationProvider: LocationProvider
 ) : BaseViewModel<RegisterIntent, RegisterState, RegisterEffect>() {
 
     override fun createInitialState(): RegisterState = RegisterState()
@@ -24,8 +26,11 @@ class RegisterViewModel @Inject constructor(
             is RegisterIntent.OnMobileChanged -> setState { copy(mobile = intent.mobile) }
             is RegisterIntent.OnDobChanged -> setState { copy(dob = intent.dob) }
             is RegisterIntent.OnFamilyRoleChanged -> setState { copy(familyRole = intent.role) }
-            RegisterIntent.OnRegisterClicked -> register()
+            RegisterIntent.OnRegisterClicked -> {
+                setEffect { RegisterEffect.RequestLocation }
+            }
             RegisterIntent.OnLoginClicked -> setEffect { RegisterEffect.NavigateToLogin }
+            is RegisterIntent.OnLocationPermissionResult -> register()
         }
     }
 
@@ -39,6 +44,9 @@ class RegisterViewModel @Inject constructor(
             }
 
             setState { copy(isLoading = true, error = null) }
+            
+            val location = locationProvider.getCurrentLocation()
+            
             val user = UserEntity(
                 userId = "", // Will be set by AuthRepository
                 fullName = uiState.value.fullName,
@@ -55,7 +63,11 @@ class RegisterViewModel @Inject constructor(
                 weight = null,
                 height = null,
                 allergies = null,
-                familyRole = if (uiState.value.isOwnerCandidate) null else uiState.value.familyRole
+                familyRole = if (uiState.value.isOwnerCandidate) null else uiState.value.familyRole,
+                latitude = location?.latitude,
+                longitude = location?.longitude,
+                locationUpdatedAt = if (location != null) System.currentTimeMillis() else null,
+                userRole = if (uiState.value.isOwnerCandidate) "OWNER" else "FAMILY"
             )
             val result = authRepository.register(user, uiState.value.password)
             result.onSuccess {
