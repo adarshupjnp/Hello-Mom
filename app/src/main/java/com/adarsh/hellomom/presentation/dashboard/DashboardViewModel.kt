@@ -119,7 +119,8 @@ class DashboardViewModel @Inject constructor(
                 dashboardRepository.getRecentSymptoms(targetUserId),
                 dashboardRepository.getConnectedFamilyMembers(targetUserId),
                 userRepository.getUser(targetUserId),
-                scheduleRepository.getDailyStatuses(targetUserId, todayDate)
+                scheduleRepository.getDailyStatuses(targetUserId, todayDate),
+                reminderRepository.getAllReminders()
             ) { arrayOfFlows ->
                 val health = arrayOfFlows[0] as MotherHealthData
                 val kicks = arrayOfFlows[1] as Int
@@ -131,6 +132,9 @@ class DashboardViewModel @Inject constructor(
                 val ownerUser = (arrayOfFlows[6] as UserEntity?) ?: access.owner
                 @Suppress("UNCHECKED_CAST")
                 val dailyStatuses = arrayOfFlows[7] as List<DailyScheduleStatusEntity>
+                @Suppress("UNCHECKED_CAST")
+                val allReminders = arrayOfFlows[8] as List<ReminderEntity>
+
                 // refIds the owner has ticked done today (drives the Upcoming green check + family view).
                 val doneToday = dailyStatuses
                     .filter { it.isDone && !it.isDeleted }
@@ -196,6 +200,9 @@ class DashboardViewModel @Inject constructor(
                     medicines = meds
                         .filter { isMedicineUpcomingToday(it, now, startOfToday) }
                         .sortedBy { nextDoseMillisToday(it, now, startOfToday) },
+                    reminders = allReminders
+                        .filter { it.userId == targetUserId && it.date == todayDate && it.time >= now }
+                        .sortedBy { it.time },
                     symptoms = symptoms,
                     familyMembers = family,
                     doneToday = doneToday,

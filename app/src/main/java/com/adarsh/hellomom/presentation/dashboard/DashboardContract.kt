@@ -30,9 +30,10 @@ data class DashboardState(
     val healthData: MotherHealthData = MotherHealthData(),
     val appointments: List<AppointmentEntity> = emptyList(),
     val medicines: List<MedicineEntity> = emptyList(),
+    val reminders: List<ReminderEntity> = emptyList(),
     val symptoms: List<SymptomLogEntity> = emptyList(),
     val familyMembers: List<FamilyMemberEntity> = emptyList(),
-    /** refIds (appointmentId / medicineId) marked done TODAY, from daily_schedule_status. */
+    /** refIds (appointmentId / medicineId / reminderId) marked done TODAY, from daily_schedule_status. */
     val doneToday: Set<String> = emptySet(),
     val kickCount: Int = 0,
     val isLoading: Boolean = false,
