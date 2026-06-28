@@ -212,7 +212,7 @@ private fun OwnerNode(owner: UserEntity) {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .align(Alignment.Center)
-                .offset(y = 48.dp)
+                .offset(y = 52.dp)
         ) {
             Text(
                 text = owner.fullName.split(" ").firstOrNull() ?: "You",
@@ -313,7 +313,7 @@ private fun FamilyNodes(owner: UserEntity, members: List<FamilyMemberEntity>, ra
 
                 // Place label outside the circle
                 // We use an extra offset to push text beyond the avatar
-                val labelPadding = 44.dp.toPx()
+                val labelPadding = 52.dp.toPx()
                 val lx = center.x + (radius + labelPadding) * cos(angle).toFloat() - labelPlaceable.width / 2f
                 val ly = center.y + (radius + labelPadding) * sin(angle).toFloat() - labelPlaceable.height / 2f
                 labelPlaceable.place(lx.toInt(), ly.toInt())
