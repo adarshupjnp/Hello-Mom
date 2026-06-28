@@ -21,6 +21,8 @@ data class BillingState(
     val isLoading: Boolean = false,
     val isOwner: Boolean = true,
     val userName: String = "",
+    val userHospitalName: String? = null,
+    val userDoctorName: String? = null,
     val pregnancyWeek: Int = 1,
     val error: String? = null
 ) : UiState

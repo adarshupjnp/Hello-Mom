@@ -26,6 +26,7 @@ data class AppointmentState(
     val isLoading: Boolean = false,
     val isOwner: Boolean = false,
     val userName: String = "",
+    val userHospitalName: String? = null,
     val pregnancyWeek: Int = 1,
     val error: String? = null
 ) : UiState

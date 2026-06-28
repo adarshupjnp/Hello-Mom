@@ -190,7 +190,7 @@ class TodayScheduleViewModel @Inject constructor(
 
         // Add Reminders (Coconut Water, Lunch meal, evening meal, dinner, etc.), de-duplicated so a
         // duplicate auto-reminder row never shows as two schedule items.
-        ReminderDedup.dedupe(reminders).forEach { r ->
+        ReminderDedup.dedupe(reminders).filter { it.title != "Sleep Reminder" }.forEach { r ->
             val displayTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(r.time))
             items += ScheduleItem(
                 refId = r.id.toString(),
@@ -202,17 +202,6 @@ class TodayScheduleViewModel @Inject constructor(
                 isDone = done(ScheduleItemType.REMINDER, r.id.toString())
             )
         }
-
-        // Sleep bookend.
-        items += ScheduleItem(
-            refId = "sleep",
-            type = ScheduleItemType.ROUTINE,
-            title = "Sleep",
-            subtitle = "Wind down & rest",
-            time = sleep,
-            sortMinutes = parseMinutes(sleep),
-            isDone = done(ScheduleItemType.ROUTINE, "sleep")
-        )
 
         val sorted = items.sortedWith(compareBy({ it.sortMinutes }, { it.title }))
         return Built(sorted, wake, sleep)

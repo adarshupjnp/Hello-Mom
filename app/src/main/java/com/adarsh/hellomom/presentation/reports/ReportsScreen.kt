@@ -51,7 +51,7 @@ fun ReportsScreen(
                     details = it.category
                 )
             }
-            PdfExporter.exportToPdf(
+            PdfExporter.exportModernToPdf(
                 context = context,
                 uri = it,
                 title = "Medical Reports Summary",

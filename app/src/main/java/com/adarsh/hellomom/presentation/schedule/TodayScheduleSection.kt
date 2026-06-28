@@ -24,6 +24,9 @@ import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.LocalDrink
+import androidx.compose.material.icons.filled.Fastfood
+import androidx.compose.material.icons.filled.Dining
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -356,18 +359,36 @@ private fun TimePickerDialog(
 
 /* ---- small helpers ---- */
 
-private fun iconFor(item: ScheduleItem): ImageVector = when (item.type) {
-    ScheduleItemType.MEDICINE -> Icons.Default.Medication
-    ScheduleItemType.MEAL -> Icons.Default.Restaurant
-    ScheduleItemType.ROUTINE -> if (item.refId == "sleep") Icons.Default.Bedtime else Icons.Default.WbSunny
-    ScheduleItemType.REMINDER -> Icons.Default.Notifications
+private fun iconFor(item: ScheduleItem): ImageVector = when {
+    item.title.contains("Awake", true) -> Icons.Default.WbSunny
+    item.title.contains("Medicine", true) -> Icons.Default.Medication
+    item.title.contains("Coconut", true) -> Icons.Default.LocalDrink
+    item.title.contains("Lunch", true) -> Icons.Default.Restaurant
+    item.title.contains("Evening", true) -> Icons.Default.Fastfood
+    item.title.contains("Dinner", true) -> Icons.Default.Dining
+    item.title.contains("Sleep", true) -> Icons.Default.Bedtime
+    else -> when (item.type) {
+        ScheduleItemType.MEDICINE -> Icons.Default.Medication
+        ScheduleItemType.MEAL -> Icons.Default.Restaurant
+        ScheduleItemType.ROUTINE -> if (item.refId == "sleep") Icons.Default.Bedtime else Icons.Default.WbSunny
+        ScheduleItemType.REMINDER -> Icons.Default.Notifications
+    }
 }
 
-private fun accentFor(item: ScheduleItem): Color = when (item.type) {
-    ScheduleItemType.MEDICINE -> Color(0xFF5C6BC0)
-    ScheduleItemType.MEAL -> Color(0xFF66BB6A)
-    ScheduleItemType.ROUTINE -> if (item.refId == "sleep") Color(0xFF9575CD) else Color(0xFFFFB300)
-    ScheduleItemType.REMINDER -> Color(0xFFF06292)
+private fun accentFor(item: ScheduleItem): Color = when {
+    item.title.contains("Awake", true) -> Color(0xFFFFB300) // Amber
+    item.title.contains("Medicine", true) -> Color(0xFF5C6BC0) // Indigo
+    item.title.contains("Coconut", true) -> Color(0xFF4FC3F7) // Light Blue
+    item.title.contains("Lunch", true) -> Color(0xFF66BB6A) // Green
+    item.title.contains("Evening", true) -> Color(0xFFFFA726) // Orange
+    item.title.contains("Dinner", true) -> Color(0xFF795548) // Brown
+    item.title.contains("Sleep", true) -> Color(0xFF9575CD) // Purple
+    else -> when (item.type) {
+        ScheduleItemType.MEDICINE -> Color(0xFF5C6BC0)
+        ScheduleItemType.MEAL -> Color(0xFF66BB6A)
+        ScheduleItemType.ROUTINE -> if (item.refId == "sleep") Color(0xFF9575CD) else Color(0xFFFFB300)
+        ScheduleItemType.REMINDER -> Color(0xFFF06292)
+    }
 }
 
 private fun formatToday(): String =

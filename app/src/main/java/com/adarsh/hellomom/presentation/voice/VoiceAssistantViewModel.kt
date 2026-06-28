@@ -124,8 +124,22 @@ class VoiceAssistantViewModel @Inject constructor(
     private fun playWelcomeMessage() {
         if (welcomePlayed) return
         welcomePlayed = true
+        
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val lastWelcomeDate = preferenceManager.lastVoiceWelcomeDate
         val firstEver = !preferenceManager.hasShownVoiceWelcome
-        Log.d("VoiceAssistant", "playWelcomeMessage firstEver=$firstEver")
+        
+        // If it's not the first time ever AND it's already been played today, skip auto-activation.
+        if (!firstEver && lastWelcomeDate == today) {
+            Log.d("VoiceAssistant", "playWelcomeMessage: Already played today ($today). Skipping auto-activation.")
+            return
+        }
+
+        Log.d("VoiceAssistant", "playWelcomeMessage firstEver=$firstEver today=$today lastDate=$lastWelcomeDate")
+        
+        // Update the last played date to today
+        preferenceManager.lastVoiceWelcomeDate = today
+
         viewModelScope.launch {
             val name = currentUserName()
             val msg = if (firstEver) {

@@ -58,7 +58,7 @@ fun AppointmentScreen(
                 PdfExporter.PdfRow(
                     date = sdf.format(Date(it.appointmentTime)),
                     description = "Dr. ${it.doctorName}",
-                    details = it.hospitalName
+                    details = it.notes ?: ""
                 )
             }
             PdfExporter.exportModernToPdf(
@@ -67,7 +67,8 @@ fun AppointmentScreen(
                 title = if (pendingDownload != null) "Appointment Details" else "Doctor Appointments Report",
                 userName = state.userName,
                 week = state.pregnancyWeek,
-                content = content
+                content = content,
+                userHospital = state.userHospitalName
             )
         }
         pendingDownload = null
@@ -375,6 +376,13 @@ fun AppointmentItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = "Dr. ${appointment.doctorName}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                 Text(text = appointment.hospitalName, style = MaterialTheme.typography.bodyMedium)
+                if (!appointment.notes.isNullOrBlank()) {
+                    Text(
+                        text = appointment.notes,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(text = dateStr, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
             }

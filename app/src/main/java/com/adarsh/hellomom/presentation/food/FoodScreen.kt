@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -614,13 +615,13 @@ fun AddMealDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Meal") },
+        title = { Text("Add Meal", fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(text = "Select Category", style = MaterialTheme.typography.labelLarge)
-                val types = listOf("Breakfast", "Lunch", "Dinner", "Snack")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(text = "Select Category", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 
-                Row(
+                val types = listOf("Breakfast", "Lunch", "Dinner", "Snack")
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -636,8 +637,9 @@ fun AddMealDialog(
                 OutlinedTextField(
                     value = items, 
                     onValueChange = { items = it }, 
-                    label = { Text("Food Items") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("Food Items (e.g. Roti, Dal)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
                 )
                 
                 OutlinedTextField(
@@ -648,6 +650,7 @@ fun AddMealDialog(
                         .fillMaxWidth()
                         .clickable { showTimePicker = true },
                     enabled = false,
+                    shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         disabledTextColor = MaterialTheme.colorScheme.onSurface,
                         disabledBorderColor = MaterialTheme.colorScheme.outline,
@@ -660,18 +663,20 @@ fun AddMealDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "Days of the week", style = MaterialTheme.typography.labelLarge)
-                    val allSelected = selectedDays.containsAll(weekDays)
-                    TextButton(onClick = {
-                        selectedDays = if (allSelected) emptySet() else weekDays.toSet()
-                    }) {
-                        Text(if (allSelected) "Clear all" else "All days")
+                    Text(text = "Days of the week", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    val allSelected = selectedDays.size == weekDays.size
+                    TextButton(
+                        onClick = { selectedDays = if (allSelected) emptySet() else weekDays.toSet() },
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text(if (allSelected) "Clear all" else "All days", fontSize = 12.sp)
                     }
                 }
+                
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     weekDays.forEach { day ->
                         FilterChip(
@@ -681,21 +686,18 @@ fun AddMealDialog(
                                     if (!add(day)) remove(day)
                                 }
                             },
-                            label = { Text(day) }
+                            label = { Text(day, fontSize = 12.sp) }
                         )
                     }
                 }
-                Text(
-                    text = if (selectedDays.isEmpty())
-                        "Select at least one day"
-                    else
-                        "${selectedDays.size} day(s) selected",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (selectedDays.isEmpty())
-                        MaterialTheme.colorScheme.error
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                
+                if (selectedDays.isEmpty()) {
+                    Text(
+                        text = "Select at least one day",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         },
         confirmButton = {

@@ -59,6 +59,8 @@ class AppointmentViewModel @Inject constructor(
                 // Family members read the owner's data (activeUserId); owners read their own.
                 // The week always comes from the owner's start date (family has none of its own).
                 val week = PregnancyProgress.week(access.owner?.pregnancyStartDate ?: user.pregnancyStartDate)
+                val ownerHospital = access.owner?.hospitalName
+                
                 setState { copy(isOwner = access.isOwner) }
                 appointmentRepository.getAppointments(access.activeUserId)
                     .catch { e ->
@@ -70,6 +72,7 @@ class AppointmentViewModel @Inject constructor(
                             copy(
                                 appointments = list,
                                 userName = user.fullName,
+                                userHospitalName = ownerHospital,
                                 pregnancyWeek = week,
                                 isOwner = access.isOwner,
                                 isLoading = false

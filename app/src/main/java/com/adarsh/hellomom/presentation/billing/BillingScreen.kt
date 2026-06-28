@@ -69,7 +69,9 @@ fun BillingScreen(
                 userName = state.userName,
                 week = state.pregnancyWeek,
                 totalAmount = if (pendingDownload != null) pendingDownload!!.amount else state.totalExpense,
-                rows = content
+                rows = content,
+                userHospital = state.userHospitalName,
+                userDoctor = state.userDoctorName
             )
         }
         pendingDownload = null

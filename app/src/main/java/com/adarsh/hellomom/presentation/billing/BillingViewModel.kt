@@ -59,6 +59,9 @@ class BillingViewModel @Inject constructor(
             if (user != null) {
                 // Use the owner's pregnancy start date so the PDF header week is correct for family too.
                 val week = PregnancyProgress.week(access.owner?.pregnancyStartDate ?: user.pregnancyStartDate)
+                val ownerHospital = access.owner?.hospitalName
+                val ownerDoctor = access.owner?.doctorName
+                
                 billingRepository.getBills(access.activeUserId)
                     .catch { e ->
                         SyncLogger.error("Billing flow failed", e)
@@ -69,6 +72,8 @@ class BillingViewModel @Inject constructor(
                             copy(
                                 bills = list,
                                 userName = access.owner?.fullName ?: user.fullName,
+                                userHospitalName = ownerHospital,
+                                userDoctorName = ownerDoctor,
                                 pregnancyWeek = week,
                                 isOwner = access.isOwner,
                                 isLoading = false

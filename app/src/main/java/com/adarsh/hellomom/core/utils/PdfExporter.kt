@@ -4,6 +4,9 @@ import android.content.Context
 import android.graphics.*
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
 import com.adarsh.hellomom.R
 import java.io.FileOutputStream
 import java.util.*
@@ -21,7 +24,9 @@ object PdfExporter {
         week: Int,
         totalAmount: Double,
         rows: List<BillingPdfRow>,
-        downloadUrl: String = "https://hello-mom-6e500.web.app/"
+        downloadUrl: String = "https://hello-mom-6e500.web.app/",
+        userHospital: String? = null,
+        userDoctor: String? = null
     ) {
         val pdfDocument = PdfDocument()
         val pageWidth = 595
@@ -71,6 +76,21 @@ object PdfExporter {
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         canvas.drawText(userName, pageWidth - margin, currentY + 30f, paint)
         
+        // Show Hospital & Doctor in Header if provided
+        if (!userHospital.isNullOrBlank() || !userDoctor.isNullOrBlank()) {
+            paint.color = Color.DKGRAY
+            paint.textSize = 10f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            
+            val info = listOfNotNull(
+                userDoctor?.let { "Doctor: $it" },
+                userHospital?.let { "Hospital: $it" }
+            ).joinToString(" | ")
+            
+            canvas.drawText(info, pageWidth - margin, currentY + 45f, paint)
+            currentY += 15f
+        }
+
         paint.color = Color.BLACK
         paint.textSize = 11f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
@@ -159,10 +179,11 @@ object PdfExporter {
         
         paint.color = Color.BLACK
         paint.textSize = 12f
-        val col1 = margin + 30f
-        val col2 = margin + 120f
-        val col3 = margin + 320f
-        val col4 = pageWidth - margin - 40f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        val col1 = margin + 5f    // Date
+        val col2 = margin + 120f  // Description
+        val col3 = margin + 310f  // Category
+        val col4 = pageWidth - margin - 5f // Amount
         
         paint.textAlign = Paint.Align.LEFT
         canvas.drawText("Date", col1, currentY + 20f, paint)
@@ -173,22 +194,38 @@ object PdfExporter {
 
         currentY += 35f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        val textPaint = TextPaint(paint)
         
         rows.forEachIndexed { index, row ->
+            if (currentY > pageHeight - 160) return@forEachIndexed
+
+            // Measure multi-line text for column 2 (Description) - increased width to 190
+            val staticLayout = StaticLayout.Builder.obtain(row.description, 0, row.description.length, textPaint, 190)
+                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                .build()
+            
+            val rowHeight = Math.max(30f, staticLayout.height.toFloat() + 10f)
+
             if (index % 2 == 0) {
                 paint.color = Color.parseColor("#FAFAFA")
-                canvas.drawRect(margin, currentY - 5f, pageWidth - margin, currentY + 25f, paint)
+                canvas.drawRect(margin, currentY - 5f, pageWidth - margin, currentY + rowHeight - 5f, paint)
             }
             
             paint.color = Color.BLACK
             paint.textAlign = Paint.Align.LEFT
             canvas.drawText(row.date, col1, currentY + 15f, paint)
-            canvas.drawText(row.description, col2, currentY + 15f, paint)
+            
+            // Draw Description with wrapping
+            canvas.save()
+            canvas.translate(col2, currentY)
+            staticLayout.draw(canvas)
+            canvas.restore()
+            
             canvas.drawText(row.category, col3, currentY + 15f, paint)
             paint.textAlign = Paint.Align.RIGHT
             canvas.drawText("₹${row.amount}", col4, currentY + 15f, paint)
             
-            currentY += 30f
+            currentY += rowHeight
         }
 
         // 5. Footer (QR Code + Disclaimer)
@@ -258,6 +295,12 @@ object PdfExporter {
         paint.color = Color.GRAY
         canvas.drawText("Secure Digital Sync", qrX - 15f, currentY + 40f, paint)
 
+        // 6. Signature (Center Bottom)
+        paint.textAlign = Paint.Align.CENTER
+        paint.textSize = 10f
+        paint.color = Color.GRAY
+        canvas.drawText("Powered By Adarsh Dwivedi", pageWidth / 2f, pageHeight - 30f, paint)
+
         pdfDocument.finishPage(page)
 
         try {
@@ -284,7 +327,8 @@ object PdfExporter {
         userName: String,
         week: Int,
         content: List<PdfRow>,
-        downloadUrl: String = "https://hello-mom-6e500.web.app/"
+        downloadUrl: String = "https://hello-mom-6e500.web.app/",
+        userHospital: String? = null
     ) {
         val pdfDocument = PdfDocument()
         val pageWidth = 595
@@ -331,6 +375,21 @@ object PdfExporter {
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         canvas.drawText(userName, pageWidth - margin, currentY + 30f, paint)
         
+        // Show Hospital & Doctor in Header if provided
+        if (!userHospital.isNullOrBlank() || !userDoctor.isNullOrBlank()) {
+            paint.color = Color.DKGRAY
+            paint.textSize = 10f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            
+            val info = listOfNotNull(
+                userDoctor?.let { "Doctor: $it" },
+                userHospital?.let { "Hospital: $it" }
+            ).joinToString(" | ")
+            
+            canvas.drawText(info, pageWidth - margin, currentY + 45f, paint)
+            currentY += 15f
+        }
+
         paint.color = Color.BLACK
         paint.textSize = 11f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
@@ -372,9 +431,12 @@ object PdfExporter {
         paint.color = Color.BLACK
         paint.textSize = 12f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        val col1 = margin + 30f
-        val col2 = margin + 140f
-        val col3 = margin + 320f
+        
+        // Re-allocated column positions to prevent overlap
+        val col1 = margin + 5f    // Date/Time
+        val col2 = margin + 155f  // Description
+        val col3 = margin + 310f  // Details
+        val maxWidth3 = (pageWidth - margin) - col3 // Max width for column 3
         
         paint.textAlign = Paint.Align.LEFT
         // Determine header labels based on title context
@@ -389,7 +451,7 @@ object PdfExporter {
         val label3 = when {
             title.contains("Medicine", true) -> "Dosage"
             title.contains("Food", true) -> "Items"
-            title.contains("Appointment", true) -> "Hospital"
+            title.contains("Appointment", true) -> "Details"
             title.contains("Contraction", true) -> "Frequency"
             else -> "Details"
         }
@@ -398,27 +460,49 @@ object PdfExporter {
         canvas.drawText(label2, col2, currentY + 20f, paint)
         canvas.drawText(label3, col3, currentY + 20f, paint)
 
-        currentY += 35f
+        currentY += 40f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        val textPaint = TextPaint(paint)
         
         content.forEachIndexed { index, row ->
-            if (currentY > pageHeight - 150) {
-                // Simplified pagination: usually we'd finish and start a new page
+            if (currentY > pageHeight - 160) {
+                // For simplicity in this implementation, we just stop. 
+                // A production app would start a new page.
+                return@forEachIndexed
             }
+            
+            // Measure multi-line text for column 3 (Details)
+            val staticLayout = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                StaticLayout.Builder.obtain(row.details, 0, row.details.length, textPaint, maxWidth3.toInt())
+                    .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                    .build()
+            } else {
+                @Suppress("DEPRECATION")
+                StaticLayout(row.details, textPaint, maxWidth3.toInt(), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0f, false)
+            }
+            
+            val rowHeight = Math.max(30f, staticLayout.height.toFloat() + 10f)
+
             if (index % 2 == 0) {
                 paint.color = Color.parseColor("#FAFAFA")
-                canvas.drawRect(margin, currentY - 5f, pageWidth - margin, currentY + 25f, paint)
+                canvas.drawRect(margin, currentY - 5f, pageWidth - margin, currentY + rowHeight - 5f, paint)
             }
             
             paint.color = Color.BLACK
+            // Draw Column 1 & 2 (Single line assumed for simplicity, or we could wrap these too)
             canvas.drawText(row.date, col1, currentY + 15f, paint)
-            canvas.drawText(row.description, col2, currentY + 15f, paint)
             
-            // Handle long text in details (like Journal)
-            val details = if (row.details.length > 40) row.details.take(37) + "..." else row.details
-            canvas.drawText(details, col3, currentY + 15f, paint)
+            // Wrap column 2 (Description) if it's too long
+            val desc = if (row.description.length > 25) row.description.take(22) + "..." else row.description
+            canvas.drawText(desc, col2, currentY + 15f, paint)
             
-            currentY += 30f
+            // Draw Column 3 (Details) with wrapping
+            canvas.save()
+            canvas.translate(col3, currentY)
+            staticLayout.draw(canvas)
+            canvas.restore()
+            
+            currentY += rowHeight
         }
 
         // 4. Footer (Unified style)
@@ -469,6 +553,12 @@ object PdfExporter {
         canvas.drawText(downloadUrl.removePrefix("https://"), qrX - 15f, currentY + 26f, paint)
         paint.color = Color.GRAY
         canvas.drawText("Secure Digital Sync", qrX - 15f, currentY + 40f, paint)
+
+        // 5. Signature (Center Bottom)
+        paint.textAlign = Paint.Align.CENTER
+        paint.textSize = 10f
+        paint.color = Color.GRAY
+        canvas.drawText("Powered By Adarsh Dwivedi", pageWidth / 2f, pageHeight - 30f, paint)
 
         pdfDocument.finishPage(page)
         try {

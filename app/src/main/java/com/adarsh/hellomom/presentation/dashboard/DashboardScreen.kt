@@ -396,6 +396,7 @@ private fun AiProviderChooser(
 private fun HomeTabContent(
     state: DashboardState,
     contentPadding: PaddingValues,
+    navController: NavController,
     onToggleDone: (type: String, refId: String, isDone: Boolean) -> Unit
 ) {
     LazyColumn(
@@ -406,7 +407,7 @@ private fun HomeTabContent(
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         // A. Week Progress (current week + progress indicator/timeline)
-        item { HeaderSection(state) }
+        item { HeaderSection(state, onClick = { navController.navigate(Screen.BabyProgress.route) }) }
 
         // C. Upcoming Things (appointments, medicines, reminders, checkups…)
         item {
@@ -866,32 +867,37 @@ private fun BabyStatPill(
     value: String,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
-            .padding(horizontal = 10.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    Card(
+        modifier = modifier.shadow(elevation = 2.dp, shape = RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(16.dp)
-        )
-        Column {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = value,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center
+            )
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
-            )
-            Text(
-                text = value,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -1267,6 +1273,28 @@ fun UpcomingReminderCard(
     isDone: Boolean,
     onToggleDone: (Boolean) -> Unit
 ) {
+    val icon = when {
+        reminder.title.contains("Awake", true) -> Icons.Default.WbSunny
+        reminder.title.contains("Medicine", true) -> Icons.Default.Medication
+        reminder.title.contains("Coconut", true) -> Icons.Default.LocalDrink
+        reminder.title.contains("Lunch", true) -> Icons.Default.Restaurant
+        reminder.title.contains("Evening", true) -> Icons.Default.Fastfood
+        reminder.title.contains("Dinner", true) -> Icons.Default.Dining
+        reminder.title.contains("Sleep", true) -> Icons.Default.Bedtime
+        else -> Icons.Default.Alarm
+    }
+    
+    val accent = when {
+        reminder.title.contains("Awake", true) -> Color(0xFFFFB300)
+        reminder.title.contains("Medicine", true) -> Color(0xFF5C6BC0)
+        reminder.title.contains("Coconut", true) -> Color(0xFF4FC3F7)
+        reminder.title.contains("Lunch", true) -> Color(0xFF66BB6A)
+        reminder.title.contains("Evening", true) -> Color(0xFFFFA726)
+        reminder.title.contains("Dinner", true) -> Color(0xFF795548)
+        reminder.title.contains("Sleep", true) -> Color(0xFF9575CD)
+        else -> Color(0xFFF06292)
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth().shadow(elevation = 2.dp, shape = RoundedCornerShape(20.dp)),
         shape = RoundedCornerShape(20.dp),
@@ -1280,10 +1308,10 @@ fun UpcomingReminderCard(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                    .background(accent.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Alarm, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                Icon(icon, contentDescription = null, tint = accent)
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {

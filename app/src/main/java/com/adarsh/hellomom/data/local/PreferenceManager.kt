@@ -16,6 +16,7 @@ class PreferenceManager @Inject constructor(
         private const val KEY_LANGUAGE = "selected_language"
         private const val KEY_VOICE_ENABLED = "voice_enabled"
         private const val KEY_VOICE_WELCOME_SHOWN = "voice_welcome_shown"
+        private const val KEY_LAST_VOICE_WELCOME_DATE = "last_voice_welcome_date"
     }
 
     // Default language is Hindi: the voice assistant (and TTS) speak Hindi until the user
@@ -34,6 +35,10 @@ class PreferenceManager @Inject constructor(
     var hasShownVoiceWelcome: Boolean
         get() = prefs.getBoolean(KEY_VOICE_WELCOME_SHOWN, false)
         set(value) = prefs.edit().putBoolean(KEY_VOICE_WELCOME_SHOWN, value).apply()
+
+    var lastVoiceWelcomeDate: String
+        get() = prefs.getString(KEY_LAST_VOICE_WELCOME_DATE, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_LAST_VOICE_WELCOME_DATE, value).apply()
 
     fun clear() {
         prefs.edit().clear().apply()
