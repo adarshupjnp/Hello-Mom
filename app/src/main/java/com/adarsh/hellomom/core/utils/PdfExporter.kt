@@ -328,7 +328,8 @@ object PdfExporter {
         week: Int,
         content: List<PdfRow>,
         downloadUrl: String = "https://hello-mom-6e500.web.app/",
-        userHospital: String? = null
+        userHospital: String? = null,
+        userDoctor: String? = null
     ) {
         val pdfDocument = PdfDocument()
         val pageWidth = 595

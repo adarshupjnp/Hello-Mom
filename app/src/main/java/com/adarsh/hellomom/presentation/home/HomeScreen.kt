@@ -277,38 +277,37 @@ fun QuickActionsRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            ActionCard(title = "Medicines", icon = Icons.Default.AddCircle, modifier = Modifier.weight(1f), onClick = onMedicineClick)
-            ActionCard(title = "Food", icon = Icons.Default.ThumbUp, modifier = Modifier.weight(1f), onClick = onFoodClick)
+            ActionCard(title = "Medicines", icon = Icons.Default.AddCircle, modifier = Modifier.weight(1f), onActionClick = onMedicineClick)
+            ActionCard(title = "Food", icon = Icons.Default.ThumbUp, modifier = Modifier.weight(1f), onActionClick = onFoodClick)
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            ActionCard(title = "Appointments", icon = Icons.Default.DateRange, modifier = Modifier.weight(1f), onClick = onAppointmentClick)
-            ActionCard(title = "Reports", icon = Icons.Default.Edit, modifier = Modifier.weight(1f), onClick = onReportsClick)
+            ActionCard(title = "Appointments", icon = Icons.Default.DateRange, modifier = Modifier.weight(1f), onActionClick = onAppointmentClick)
+            ActionCard(title = "Reports", icon = Icons.Default.Edit, modifier = Modifier.weight(1f), onActionClick = onReportsClick)
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            ActionCard(title = "Bills", icon = Icons.Default.ShoppingCart, modifier = Modifier.weight(1f), onClick = onBillingClick)
-            ActionCard(title = "Family", icon = Icons.Default.AccountBox, modifier = Modifier.weight(1f), onClick = onFamilyClick)
+            ActionCard(title = "Bills", icon = Icons.Default.ShoppingCart, modifier = Modifier.weight(1f), onActionClick = onBillingClick)
+            ActionCard(title = "Family", icon = Icons.Default.AccountBox, modifier = Modifier.weight(1f), onActionClick = onFamilyClick)
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            ActionCard(title = "AI Symptom", icon = Icons.Default.Warning, modifier = Modifier.weight(1f), onClick = onSymptomClick)
+            ActionCard(title = "AI Symptom", icon = Icons.Default.Warning, modifier = Modifier.weight(1f), onActionClick = onSymptomClick)
             Spacer(modifier = Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-fun ActionCard(title: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun ActionCard(title: String, icon: ImageVector, modifier: Modifier = Modifier, onActionClick: () -> Unit) {
     Card(
-        onClick = onClick,
-        modifier = modifier.height(100.dp)
+        modifier = modifier.height(100.dp).clickable { onActionClick() }
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),

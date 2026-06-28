@@ -298,6 +298,7 @@ fun DashboardScreen(
                         AppTab.HOME -> HomeTabContent(
                             state = state,
                             contentPadding = paddingValues,
+                            navController = navController,
                             onToggleDone = { type, refId, isDone ->
                                 viewModel.sendIntent(DashboardIntent.ToggleUpcomingDone(type, refId, isDone))
                             }
@@ -321,6 +322,7 @@ fun DashboardScreen(
                         AppTab.BABY -> HomeTabContent(
                             state = state,
                             contentPadding = paddingValues,
+                            navController = navController,
                             onToggleDone = { type, refId, isDone ->
                                 viewModel.sendIntent(DashboardIntent.ToggleUpcomingDone(type, refId, isDone))
                             }
@@ -407,7 +409,7 @@ private fun HomeTabContent(
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         // A. Week Progress (current week + progress indicator/timeline)
-        item { HeaderSection(state, onClick = { navController.navigate(Screen.BabyProgress.route) }) }
+        item { HeaderSection(state, onHeaderClick = { navController.navigate(Screen.BabyProgress.route) }) }
 
         // C. Upcoming Things (appointments, medicines, reminders, checkups…)
         item {
@@ -552,14 +554,14 @@ private fun QuickActionsTabContent(
 @Composable
 private fun EmergencyActionCard(navController: NavController) {
     Card(
-        onClick = {
-            val intent = android.content.Intent(android.content.Intent.ACTION_DIAL)
-            intent.data = android.net.Uri.parse("tel:102")
-            navController.context.startActivity(intent)
-        },
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(elevation = 6.dp, shape = RoundedCornerShape(24.dp)),
+            .shadow(elevation = 6.dp, shape = RoundedCornerShape(24.dp))
+            .clickable {
+                val intent = android.content.Intent(android.content.Intent.ACTION_DIAL)
+                intent.data = android.net.Uri.parse("tel:102")
+                navController.context.startActivity(intent)
+            },
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
     ) {
@@ -672,13 +674,13 @@ fun QuickActionsGrid(navController: NavController) {
                 title = "Medicines", 
                 icon = Icons.Default.MedicalServices, 
                 modifier = Modifier.weight(1f), 
-                onClick = { navController.navigate(Screen.Medicine.route) }
+                onActionClick = { navController.navigate(Screen.Medicine.route) }
             )
             ActionCard(
                 title = "Food", 
                 icon = Icons.Default.Restaurant, 
                 modifier = Modifier.weight(1f), 
-                onClick = { navController.navigate(Screen.Food.route) }
+                onActionClick = { navController.navigate(Screen.Food.route) }
             )
         }
         Row(
@@ -689,13 +691,13 @@ fun QuickActionsGrid(navController: NavController) {
                 title = "Appointments", 
                 icon = Icons.Default.Event, 
                 modifier = Modifier.weight(1f), 
-                onClick = { navController.navigate(Screen.Appointment.route) }
+                onActionClick = { navController.navigate(Screen.Appointment.route) }
             )
             ActionCard(
                 title = "Reports", 
                 icon = Icons.Default.BarChart, 
                 modifier = Modifier.weight(1f), 
-                onClick = { navController.navigate(Screen.Reports.route) }
+                onActionClick = { navController.navigate(Screen.Reports.route) }
             )
         }
         Row(
@@ -706,13 +708,13 @@ fun QuickActionsGrid(navController: NavController) {
                 title = "Reminders", 
                 icon = Icons.Default.Alarm, 
                 modifier = Modifier.weight(1f), 
-                onClick = { navController.navigate(Screen.Reminders.route) }
+                onActionClick = { navController.navigate(Screen.Reminders.route) }
             )
             ActionCard(
                 title = "Bills", 
                 icon = Icons.Default.AccountBalanceWallet, 
                 modifier = Modifier.weight(1f), 
-                onClick = { navController.navigate(Screen.Billing.route) }
+                onActionClick = { navController.navigate(Screen.Billing.route) }
             )
         }
         Row(
@@ -723,25 +725,25 @@ fun QuickActionsGrid(navController: NavController) {
                 title = "Contraction", 
                 icon = Icons.Default.Timer, 
                 modifier = Modifier.weight(1f), 
-                onClick = { navController.navigate(Screen.ContractionTimer.route) }
+                onActionClick = { navController.navigate(Screen.ContractionTimer.route) }
             )
             ActionCard(
                 title = "Journal", 
                 icon = Icons.Default.Book, 
                 modifier = Modifier.weight(1f), 
-                onClick = { navController.navigate(Screen.Journal.route) }
+                onActionClick = { navController.navigate(Screen.Journal.route) }
             )
         }
     }
 }
 
 @Composable
-fun ActionCard(title: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun ActionCard(title: String, icon: ImageVector, modifier: Modifier = Modifier, onActionClick: () -> Unit) {
     Card(
-        onClick = onClick,
         modifier = modifier
             .height(110.dp)
-            .shadow(elevation = 6.dp, shape = RoundedCornerShape(24.dp)),
+            .shadow(elevation = 6.dp, shape = RoundedCornerShape(24.dp))
+            .clickable { onActionClick() },
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = cardBG),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -769,7 +771,7 @@ fun ActionCard(title: String, icon: ImageVector, modifier: Modifier = Modifier, 
 }
 
 @Composable
-fun HeaderSection(state: DashboardState) {
+fun HeaderSection(state: DashboardState, onHeaderClick: () -> Unit = {}) {
     val trimesterColor = when (state.trimester) {
         1 -> Color(0xFFFFD1DC)
         2 -> Color(0xFFB2EBF2)
@@ -780,7 +782,8 @@ fun HeaderSection(state: DashboardState) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .shadow(8.dp, RoundedCornerShape(24.dp)),
+                .shadow(8.dp, RoundedCornerShape(24.dp))
+                .clickable { onHeaderClick() },
             colors = CardDefaults.cardColors(containerColor = trimesterColor.copy(alpha = 0.2f)),
             shape = RoundedCornerShape(24.dp)
         ) {
