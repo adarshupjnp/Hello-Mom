@@ -273,67 +273,202 @@ object PdfExporter {
         }
     }
 
-    // Keeping the original generic exporter to avoid breaking other features
-    fun exportToPdf(
+    /**
+     * Modern PDF export for generic reports (Medicines, Appointments, etc.)
+     * Matches the visual style of the Billing report.
+     */
+    fun exportModernToPdf(
         context: Context,
         uri: Uri,
         title: String,
         userName: String,
         week: Int,
-        content: List<PdfRow>
+        content: List<PdfRow>,
+        downloadUrl: String = "https://hello-mom-6e500.web.app/"
     ) {
         val pdfDocument = PdfDocument()
-        val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
+        val pageWidth = 595
+        val pageHeight = 842
+        val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
         val page = pdfDocument.startPage(pageInfo)
         val canvas: Canvas = page.canvas
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-        var y = 50f
+        // 0. Outer Border / Frame
+        paint.color = Color.parseColor("#F0F0F0")
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 2f
+        canvas.drawRect(5f, 5f, pageWidth - 5f, pageHeight - 5f, paint)
+        paint.style = Paint.Style.FILL
 
-        // Simple Header for other reports
-        paint.color = Color.parseColor("#FFD1DC")
-        canvas.drawRect(0f, 0f, 595f, 100f, paint)
+        val margin = 40f
+        var currentY = 40f
+
+        // 1. Header (Logo + User Info)
+        val logoSize = 60f
+        val logoBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.ic_app_logo)
+        if (logoBitmap != null) {
+            val src = Rect(0, 0, logoBitmap.width, logoBitmap.height)
+            val dst = RectF(margin, currentY, margin + logoSize, currentY + logoSize)
+            canvas.drawBitmap(logoBitmap, src, dst, paint)
+        }
+
+        paint.color = Color.parseColor("#1A237E")
+        paint.textSize = 22f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        canvas.drawText("Hello", margin + logoSize + 10f, currentY + 25f, paint)
+        paint.color = Color.parseColor("#42A5F5")
+        canvas.drawText("Mom+", margin + logoSize + 10f, currentY + 50f, paint)
+
+        paint.textAlign = Paint.Align.RIGHT
+        paint.color = Color.GRAY
+        paint.textSize = 10f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        canvas.drawText("User's Name", pageWidth - margin, currentY + 10f, paint)
+        
+        paint.color = Color.BLACK
+        paint.textSize = 16f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        canvas.drawText(userName, pageWidth - margin, currentY + 30f, paint)
+        
+        paint.color = Color.BLACK
+        paint.textSize = 11f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        val trimester = when {
+            week <= 12 -> "1st Trimester"
+            week <= 26 -> "2nd Trimester"
+            else -> "3rd Trimester"
+        }
+        canvas.drawText("Pregnancy Status: Week $week, $trimester", pageWidth - margin, currentY + 50f, paint)
+
+        currentY += 80f
+        paint.textAlign = Paint.Align.LEFT
+
+        // 2. Report Summary Card
+        val cardHeight = 80f
+        val cardRect = RectF(margin, currentY, pageWidth - margin, currentY + cardHeight)
+        val gradient = LinearGradient(
+            cardRect.left, cardRect.top, cardRect.right, cardRect.bottom,
+            intArrayOf(Color.parseColor("#E1F5FE"), Color.parseColor("#F3E5F5")),
+            null, Shader.TileMode.CLAMP
+        )
+        paint.shader = gradient
+        canvas.drawRoundRect(cardRect, 20f, 20f, paint)
+        paint.shader = null
 
         paint.color = Color.BLACK
         paint.textSize = 24f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("Hello Mom+ Report", 40f, 45f, paint)
+        paint.textAlign = Paint.Align.CENTER
+        canvas.drawText(title, pageWidth / 2f, currentY + 50f, paint)
 
-        paint.textSize = 18f
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        canvas.drawText(title, 40f, 75f, paint)
+        currentY += cardHeight + 40f
 
-        y = 130f
-        paint.textSize = 14f
-        canvas.drawText("User: $userName", 40f, y, paint)
-        canvas.drawText("Pregnancy Progress: Week $week", 300f, y, paint)
+        // 3. Content Table
+        val tableHeaderRect = RectF(margin, currentY, pageWidth - margin, currentY + 30f)
+        paint.color = Color.parseColor("#F5F5F5")
+        canvas.drawRoundRect(tableHeaderRect, 10f, 10f, paint)
         
-        y += 30f
-        paint.color = Color.LTGRAY
-        canvas.drawLine(40f, y, 555f, y, paint)
-        
-        y += 40f
         paint.color = Color.BLACK
+        paint.textSize = 12f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        val col1 = margin + 30f
+        val col2 = margin + 140f
+        val col3 = margin + 320f
         
-        canvas.drawText("Date", 40f, y, paint)
-        canvas.drawText("Description", 150f, y, paint)
-        canvas.drawText("Details", 400f, y, paint)
-        
-        y += 10f
-        paint.color = Color.GRAY
-        canvas.drawLine(40f, y, 555f, y, paint)
-        
-        y += 30f
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        paint.color = Color.BLACK
-
-        content.forEach { row ->
-            canvas.drawText(row.date, 40f, y, paint)
-            canvas.drawText(row.description, 150f, y, paint)
-            canvas.drawText(row.details, 400f, y, paint)
-            y += 25f
+        paint.textAlign = Paint.Align.LEFT
+        // Determine header labels based on title context
+        val label1 = "Date/Time"
+        val label2 = when {
+            title.contains("Medicine", true) -> "Medicine Name"
+            title.contains("Food", true) -> "Meal Type"
+            title.contains("Appointment", true) -> "Doctor"
+            title.contains("Contraction", true) -> "Duration"
+            else -> "Description"
         }
+        val label3 = when {
+            title.contains("Medicine", true) -> "Dosage"
+            title.contains("Food", true) -> "Items"
+            title.contains("Appointment", true) -> "Hospital"
+            title.contains("Contraction", true) -> "Frequency"
+            else -> "Details"
+        }
+
+        canvas.drawText(label1, col1, currentY + 20f, paint)
+        canvas.drawText(label2, col2, currentY + 20f, paint)
+        canvas.drawText(label3, col3, currentY + 20f, paint)
+
+        currentY += 35f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        
+        content.forEachIndexed { index, row ->
+            if (currentY > pageHeight - 150) {
+                // Simplified pagination: usually we'd finish and start a new page
+            }
+            if (index % 2 == 0) {
+                paint.color = Color.parseColor("#FAFAFA")
+                canvas.drawRect(margin, currentY - 5f, pageWidth - margin, currentY + 25f, paint)
+            }
+            
+            paint.color = Color.BLACK
+            canvas.drawText(row.date, col1, currentY + 15f, paint)
+            canvas.drawText(row.description, col2, currentY + 15f, paint)
+            
+            // Handle long text in details (like Journal)
+            val details = if (row.details.length > 40) row.details.take(37) + "..." else row.details
+            canvas.drawText(details, col3, currentY + 15f, paint)
+            
+            currentY += 30f
+        }
+
+        // 4. Footer (Unified style)
+        currentY = pageHeight - 110f
+        paint.color = Color.parseColor("#EEEEEE")
+        canvas.drawLine(margin, currentY, pageWidth - margin, currentY, paint)
+        
+        currentY += 25f
+        val badgeWidth = 120f
+        val badgeHeight = 45f
+        val badgeRect = RectF(margin, currentY, margin + badgeWidth, currentY + badgeHeight)
+        paint.color = Color.parseColor("#E3F2FD")
+        canvas.drawRoundRect(badgeRect, 12f, 12f, paint)
+        
+        paint.color = Color.parseColor("#1976D2")
+        paint.textAlign = Paint.Align.LEFT
+        paint.textSize = 11f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        canvas.drawText("AI Verified", margin + 15f, currentY + 20f, paint)
+        paint.textSize = 9f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        canvas.drawText("Hello Mom+ AI", margin + 15f, currentY + 36f, paint)
+
+        val qrSize = 60f
+        val qrX = pageWidth - margin - qrSize
+        val qrY = currentY - 10f
+        paint.color = Color.WHITE
+        canvas.drawRect(qrX - 5, qrY - 5, qrX + qrSize + 5, qrY + qrSize + 5, paint)
+        paint.color = Color.BLACK
+        canvas.drawRect(qrX, qrY, qrX + qrSize, qrY + qrSize, paint)
+        
+        paint.color = Color.WHITE
+        fun drawFinder(x: Float, y: Float) {
+            canvas.drawRect(x + 4, y + 4, x + 16, y + 16, paint)
+            paint.color = Color.BLACK
+            canvas.drawRect(x + 7, y + 7, x + 13, y + 13, paint)
+            paint.color = Color.WHITE
+        }
+        drawFinder(qrX, qrY)
+        drawFinder(qrX + qrSize - 20, qrY)
+        drawFinder(qrX, qrY + qrSize - 20)
+
+        paint.color = Color.GRAY
+        paint.textAlign = Paint.Align.RIGHT
+        paint.textSize = 9f
+        canvas.drawText("Scan to download app", qrX - 15f, currentY + 12f, paint)
+        paint.color = Color.parseColor("#1976D2")
+        canvas.drawText(downloadUrl.removePrefix("https://"), qrX - 15f, currentY + 26f, paint)
+        paint.color = Color.GRAY
+        canvas.drawText("Secure Digital Sync", qrX - 15f, currentY + 40f, paint)
 
         pdfDocument.finishPage(page)
         try {
@@ -342,11 +477,7 @@ object PdfExporter {
                     pdfDocument.writeTo(fos)
                 }
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        } finally {
-            pdfDocument.close()
-        }
+        } catch (e: Exception) { e.printStackTrace() } finally { pdfDocument.close() }
     }
 
     data class PdfRow(

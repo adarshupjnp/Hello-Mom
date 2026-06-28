@@ -32,17 +32,26 @@ fun NotificationHistoryScreen(
     val reminders by viewModel.reminders.collectAsState()
     var selectedDate by remember { mutableStateOf<Long?>(null) }
     
-    // Requirement 1: Reminders should appear in history immediately.
     // Filter history based on selected date
     val history = remember(reminders, selectedDate) {
         // De-duplicate (auto by title+date, custom by id) so the log never shows the same reminder twice.
-        val all = ReminderDedup.dedupe(reminders).sortedByDescending { it.time }
+        val deduplicated = ReminderDedup.dedupe(reminders)
+        
+        fun startOfDay(millis: Long): Long = Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+
+        val sortedAll = deduplicated.sortedWith(
+            compareByDescending<ReminderEntity> { startOfDay(it.time) }.thenBy { it.time }
+        )
+
         if (selectedDate == null) {
-            all
+            sortedAll
         } else {
             val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
             val filterDateStr = sdf.format(Date(selectedDate!!))
-            all.filter { sdf.format(Date(it.time)) == filterDateStr }
+            sortedAll.filter { sdf.format(Date(it.time)) == filterDateStr }
         }
     }
 

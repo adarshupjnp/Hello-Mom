@@ -57,7 +57,7 @@ fun JournalScreen(
                     details = entry.content
                 )
             }
-            PdfExporter.exportToPdf(
+            PdfExporter.exportModernToPdf(
                 context = context,
                 uri = it,
                 title = if (pendingDownload != null) "Journal Entry" else "Pregnancy Journal Report",

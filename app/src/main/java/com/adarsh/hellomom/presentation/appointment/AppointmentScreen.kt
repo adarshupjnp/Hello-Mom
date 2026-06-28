@@ -61,7 +61,7 @@ fun AppointmentScreen(
                     details = it.hospitalName
                 )
             }
-            PdfExporter.exportToPdf(
+            PdfExporter.exportModernToPdf(
                 context = context,
                 uri = it,
                 title = if (pendingDownload != null) "Appointment Details" else "Doctor Appointments Report",

@@ -57,7 +57,7 @@ fun ContractionTimerScreen(
                     details = "Duration: ${it.durationMillis / 1000}s"
                 )
             }
-            PdfExporter.exportToPdf(
+            PdfExporter.exportModernToPdf(
                 context = context,
                 uri = it,
                 title = if (pendingDownload != null) "Contraction Record" else "Contraction History Report",

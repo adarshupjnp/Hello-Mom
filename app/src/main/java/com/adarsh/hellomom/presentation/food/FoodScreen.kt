@@ -81,7 +81,7 @@ fun FoodScreen(
                 ))
             }
 
-            PdfExporter.exportToPdf(
+            PdfExporter.exportModernToPdf(
                 context = context,
                 uri = it,
                 title = if (pendingDownload != null) "Meal Details" else "Nutrition & Water Report",

@@ -54,7 +54,7 @@ fun MedicineScreen(
                     details = "${it.dosage} (${it.timing})"
                 )
             }
-            PdfExporter.exportToPdf(
+            PdfExporter.exportModernToPdf(
                 context = context,
                 uri = it,
                 title = if (pendingDownload != null) "Medicine Details" else "Medicine History Report",

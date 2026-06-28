@@ -159,17 +159,6 @@ class TodayScheduleViewModel @Inject constructor(
 
         val items = mutableListOf<ScheduleItem>()
 
-        // Wake-up bookend.
-        items += ScheduleItem(
-            refId = "wakeup",
-            type = ScheduleItemType.ROUTINE,
-            title = "Wake up",
-            subtitle = "Start your day",
-            time = wake,
-            sortMinutes = parseMinutes(wake),
-            isDone = done(ScheduleItemType.ROUTINE, "wakeup")
-        )
-
         // Medicines active today, morning → night.
         meds.filter { isMedicineActiveToday(it) }.forEach { m ->
             val subtitle = listOf(m.dosage, m.beforeAfterMeal)

@@ -9,7 +9,7 @@ object ReminderConstants {
         PredefinedReminder("Evening Meal", "Time for a light evening snack or meal."),
         PredefinedReminder("Dinner", "Dinner time! Have a nutritious meal before sleep."),
         PredefinedReminder("Night Medicine", "Don't forget to take your medicine before going to bed. Good night!"),
-        PredefinedReminder("Sleep Reminder", "Good night! Time to rest well for you and your baby.")
+        PredefinedReminder("Sleep", "Good night! Time to rest well for you and your baby.")
     )
 
     /**
@@ -33,7 +33,7 @@ object ReminderConstants {
         PredefinedReminder("Baby Kick Count Reminder", "Time to count your baby's kicks. Make sure your little one is active."),
         PredefinedReminder("Doctor Appointment", "Reminder: You have a doctor appointment today."),
         PredefinedReminder("Meditation / Relaxation Time", "Take some time to relax and meditate. Stay peaceful."),
-        PredefinedReminder("Sleep Reminder", "Good night! It's time to get some rest for tomorrow.")
+        PredefinedReminder("Sleep", "Good night! It's time to get some rest for tomorrow.")
     )
 }
 
