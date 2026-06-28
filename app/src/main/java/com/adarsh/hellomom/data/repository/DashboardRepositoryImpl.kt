@@ -157,4 +157,20 @@ class DashboardRepositoryImpl @Inject constructor(
     override fun getRecentSymptoms(userId: String): Flow<List<SymptomLogEntity>> {
         return symptomDao.getSymptomLogs(userId)
     }
+
+    override suspend fun updateMemberLocation(ownerId: String, memberId: String, lat: Double?, lon: Double?, time: Long?): Result<Unit> {
+        return try {
+            familyMemberDao.updateMemberLocation(memberId, lat, lon, time)
+            firestore.collection("users").document(ownerId)
+                .collection("family_members").document(memberId)
+                .update(mapOf(
+                    "latitude" to lat,
+                    "longitude" to lon,
+                    "locationUpdatedAt" to time
+                )).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

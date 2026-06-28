@@ -18,4 +18,7 @@ interface FamilyMemberDao {
     // Reconciliation after a pull: drop members removed on another device.
     @Query("DELETE FROM family_members WHERE userId = :userId AND memberId NOT IN (:keepIds)")
     suspend fun deleteFamilyMembersNotIn(userId: String, keepIds: List<String>)
+
+    @Query("UPDATE family_members SET latitude = :lat, longitude = :lon, locationUpdatedAt = :time WHERE memberId = :memberId")
+    suspend fun updateMemberLocation(memberId: String, lat: Double?, lon: Double?, time: Long?)
 }

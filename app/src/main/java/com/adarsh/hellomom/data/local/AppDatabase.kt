@@ -22,7 +22,7 @@ import com.adarsh.hellomom.data.local.entity.*
         JournalEntity::class,
         DailyScheduleStatusEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

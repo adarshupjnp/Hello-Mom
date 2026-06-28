@@ -259,13 +259,26 @@ class DashboardViewModel @Inject constructor(
                                 currentUser.longitude == location.longitude
             
             if (!isSameLocation) {
+                val time = System.currentTimeMillis()
                 val updatedUser = currentUser.copy(
                     latitude = location.latitude,
                     longitude = location.longitude,
-                    locationUpdatedAt = System.currentTimeMillis()
+                    locationUpdatedAt = time
                 )
                 userRepository.updateUser(updatedUser)
                 SyncLogger.info("User location updated: lat=${location.latitude}, lon=${location.longitude}")
+
+                // If this is a family member, also update their position in the owner's family list
+                val ownerId = currentUser.linkedPrimaryUserId
+                if (!uiState.value.hasFullAccess && !ownerId.isNullOrEmpty()) {
+                    dashboardRepository.updateMemberLocation(
+                        ownerId = ownerId,
+                        memberId = currentUser.userId,
+                        lat = location.latitude,
+                        lon = location.longitude,
+                        time = time
+                    )
+                }
             }
         }
     }

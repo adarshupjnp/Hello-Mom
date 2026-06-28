@@ -31,4 +31,5 @@ interface DashboardRepository {
     fun getUpcomingAppointments(userId: String): Flow<List<AppointmentEntity>>
     fun getMedicinesToday(userId: String): Flow<List<MedicineEntity>>
     fun getRecentSymptoms(userId: String): Flow<List<SymptomLogEntity>>
+    suspend fun updateMemberLocation(ownerId: String, memberId: String, lat: Double?, lon: Double?, time: Long?): Result<Unit>
 }

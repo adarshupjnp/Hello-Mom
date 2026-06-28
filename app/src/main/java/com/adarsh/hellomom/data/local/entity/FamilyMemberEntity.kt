@@ -17,6 +17,10 @@ data class FamilyMemberEntity(
     val permissions: String = "", // Comma separated list of permissions
     val status: String = "", // Pending, Accepted
 
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val locationUpdatedAt: Long? = null,
+
     val syncStatus: SyncStatus = SyncStatus.PENDING,
     val updatedAt: Long = System.currentTimeMillis()
 )

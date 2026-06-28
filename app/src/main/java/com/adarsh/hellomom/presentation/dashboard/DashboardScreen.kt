@@ -52,6 +52,7 @@ import com.adarsh.hellomom.presentation.components.AiWebView
 import com.adarsh.hellomom.presentation.components.AppBottomNavBar
 import com.adarsh.hellomom.presentation.components.AppTab
 import com.adarsh.hellomom.presentation.components.NAV_SELECTED_TAB_KEY
+import com.adarsh.hellomom.presentation.dashboard.components.FamilyNetworkHub
 import com.adarsh.hellomom.presentation.schedule.TodayScheduleSection
 import com.adarsh.hellomom.ui.theme.*
 import java.text.SimpleDateFormat
@@ -429,6 +430,11 @@ private fun HomeTabContent(
         }
         if (state.hasFullAccess) {
             item { FamilyQuickView(state.familyMembers, state.hasFullAccess) }
+        }
+
+        // I. Family Network Hub (New Dashboard Section)
+        if (state.user != null && state.familyMembers.isNotEmpty()) {
+            item { FamilyNetworkHub(owner = state.user!!, members = state.familyMembers, trimester = state.trimester) }
         }
 
         // H. Motivation / Quote
