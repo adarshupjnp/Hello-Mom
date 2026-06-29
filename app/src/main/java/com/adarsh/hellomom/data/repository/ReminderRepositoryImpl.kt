@@ -71,7 +71,7 @@ class ReminderRepositoryImpl @Inject constructor(
     private suspend fun syncToFirebase(reminder: ReminderEntity) {
         try {
             firestore.collection("reminders").document(reminder.id.toString()).set(reminder).await()
-            SyncLogger.firebaseWrite("PUSH reminder", "reminders/${reminder.id}", "userId=${reminder.userId} title=${reminder.title} time=${reminder.time}")
+            SyncLogger.firebaseWrite("PUSH reminder", "reminders/${reminder.id}", "userId=${reminder.userId} title=${reminder.title} status=${reminder.status} time=${reminder.time}")
         } catch (e: Exception) {
             // Silently fail if offline, Room will track synced status
             SyncLogger.warn("PUSH reminder failed (offline?) id=${reminder.id}", e)

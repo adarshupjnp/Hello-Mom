@@ -46,6 +46,13 @@ fun LoginScreen(
     var showForgotPasswordDialog by remember { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
 
+    // Drive the text fields from local state so each keystroke renders synchronously. Binding
+    // `value` straight to the StateFlow lags by an async intent round-trip, which makes the field
+    // recompose with the stale value for a frame and resets the cursor — the visible flicker.
+    // We still forward every change to the ViewModel for validation and login.
+    var emailInput by remember { mutableStateOf(state.email) }
+    var passwordInput by remember { mutableStateOf(state.password) }
+
     LaunchedEffect(key1 = true) {
         viewModel.effect.collectLatest { effect ->
             when (effect) {
@@ -260,8 +267,11 @@ fun LoginScreen(
 
             val showEmailError = state.email.isNotBlank() && !state.isEmailValid
             OutlinedTextField(
-                value = state.email,
-                onValueChange = { viewModel.sendIntent(LoginIntent.OnEmailChanged(it)) },
+                value = emailInput,
+                onValueChange = {
+                    emailInput = it
+                    viewModel.sendIntent(LoginIntent.OnEmailChanged(it))
+                },
                 label = { Text("Email") },
                 modifier = Modifier.fillMaxWidth(),
                 leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
@@ -276,8 +286,11 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedTextField(
-                value = state.password,
-                onValueChange = { viewModel.sendIntent(LoginIntent.OnPasswordChanged(it)) },
+                value = passwordInput,
+                onValueChange = {
+                    passwordInput = it
+                    viewModel.sendIntent(LoginIntent.OnPasswordChanged(it))
+                },
                 label = { Text("Password") },
                 modifier = Modifier.fillMaxWidth(),
                 leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },

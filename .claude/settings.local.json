@@ -120,7 +120,11 @@
       "PowerShell($env:JAVA_HOME=\"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"D:\\\\adarsh_workspace\\\\Important Doc file\\\\Practice\\\\Hello-Mom+\"; $out = .\\\\gradlew.bat :app:testDebugUnitTest --tests \"com.adarsh.hellomom.voice.VoicePipelineTest\" 2>$null; Write-Output \"EXIT CODE: $LASTEXITCODE\"; $out | Select-String -Pattern \"FAILED|BUILD SUCCESSFUL|BUILD FAILED\" | Select-Object -First 8)",
       "PowerShell($env:JAVA_HOME=\"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"D:\\\\adarsh_workspace\\\\Important Doc file\\\\Practice\\\\Hello-Mom+\"; .\\\\gradlew.bat :app:compileDebugKotlin --console=plain 2>&1 | Select-String -Pattern \"e: \" | Select-Object -First 30)",
       "PowerShell($env:JAVA_HOME=\"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"D:\\\\adarsh_workspace\\\\Important Doc file\\\\Practice\\\\Hello-Mom+\"; $out = .\\\\gradlew.bat :app:compileDebugKotlin --console=plain 2>&1; Write-Output \"EXIT: $LASTEXITCODE\"; $out | Select-String -Pattern \"e: |BUILD SUCCESSFUL|BUILD FAILED\" | Select-Object -First 30)",
-      "PowerShell($env:JAVA_HOME=\"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"D:\\\\adarsh_workspace\\\\Important Doc file\\\\Practice\\\\Hello-Mom+\"; $out = .\\\\gradlew.bat :app:testDebugUnitTest --tests \"com.adarsh.hellomom.voice.VoicePipelineTest\" --console=plain 2>&1; Write-Output \"EXIT: $LASTEXITCODE\"; $out | Select-String -Pattern \"e: |FAILED|BUILD SUCCESSFUL|BUILD FAILED\" | Select-Object -First 15)"
+      "PowerShell($env:JAVA_HOME=\"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"D:\\\\adarsh_workspace\\\\Important Doc file\\\\Practice\\\\Hello-Mom+\"; $out = .\\\\gradlew.bat :app:testDebugUnitTest --tests \"com.adarsh.hellomom.voice.VoicePipelineTest\" --console=plain 2>&1; Write-Output \"EXIT: $LASTEXITCODE\"; $out | Select-String -Pattern \"e: |FAILED|BUILD SUCCESSFUL|BUILD FAILED\" | Select-Object -First 15)",
+      "Bash(xargs grep -l \"LocationProvider\\\\|getCurrentLocation\\\\|FusedLocation\")",
+      "PowerShell(head *)",
+      "Bash(grep -v \"//\")",
+      "Bash(xargs grep -l \"ACCESS_FINE_LOCATION\\\\|checkSelfPermission\")"
     ]
   }
 }

@@ -158,7 +158,10 @@ fun NavGraph(navController: NavHostController) {
         }
 
         composable(Screen.FamilyDashboard.route) {
-            ReminderListScreen(navController)
+            // The "family_dashboard" route should show the family screen, not the reminder list
+            // (the previous wiring was a copy-paste slip). Nothing navigates here yet, but this keeps
+            // the route correct if it's ever used. The Home screen embeds family via FamilyNetworkHub.
+            FamilyScreen(navController)
         }
 
         composable(Screen.Profile.route) {

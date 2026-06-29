@@ -54,11 +54,14 @@ class NotificationActionReceiver : BroadcastReceiver() {
         }
     }
 
-    /** Mark the reminder genuinely completed (Room + Firestore) and drop its pending auto-snooze check. */
+    /** Mark the reminder genuinely completed (Room + Firestore) and drop every pending alarm for it. */
     private suspend fun handleDone(reminderId: Int) {
         // markAsDone() updates Room and pushes to Firestore so linked family members get the update.
         reminderRepository.markAsDone(reminderId)
-        // The reminder is finished — cancel the 1-hour auto-snooze safety check so it can't reopen it.
+        // The reminder is finished — cancel BOTH the main reminder alarm (parity with the in-app
+        // "Done", which calls cancelReminder) and the 1-hour auto-snooze safety check, so nothing
+        // can re-arm or reopen it after completion.
+        reminderManager.cancelReminder(reminderId)
         reminderManager.cancelSnoozeCheck(reminderId)
     }
 

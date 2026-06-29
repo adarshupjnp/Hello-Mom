@@ -148,7 +148,9 @@ object PdfExporter {
         val colors = listOf("#F06292", "#9575CD", "#64B5F6", "#81C784", "#FFD54F")
         
         categoryData.entries.forEachIndexed { index, entry ->
-            val sweep = (entry.value / totalAmount).toFloat() * 360f
+            // Guard against a zero total (e.g. exporting with no expenses): Double/0 would be
+            // Infinity/NaN and draw a garbled arc. With no total there's nothing to chart, so sweep 0.
+            val sweep = if (totalAmount > 0.0) (entry.value / totalAmount).toFloat() * 360f else 0f
             paint.color = Color.parseColor(colors[index % colors.size])
             canvas.drawArc(chartBox, startAngle, sweep, true, paint)
             

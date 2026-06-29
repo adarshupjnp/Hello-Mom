@@ -404,7 +404,17 @@ class SyncRepositoryImpl @Inject constructor(
                 SyncLogger.firebaseRead("PULL reminders", "reminders[userId=$ownerUserId]", "count=${list.size}")
                 val now = System.currentTimeMillis()
                 list.forEach { reminder ->
-                    reminderDao.insertReminder(reminder.copy(synced = true))
+                    // Remote wins ONLY if it is at least as fresh as the local copy. Without this
+                    // guard the REPLACE upsert blindly overwrote local rows, so a pull that overlapped
+                    // a just-made local change — e.g. "Done" tapped on the notification popup, which
+                    // writes COMPLETED to Room + Firestore — could re-read the still-PENDING remote doc
+                    // (Firestore can serve it from cache) and clobber the freshly COMPLETED row straight
+                    // back to PENDING. Comparing updatedAt keeps the newest status and also protects an
+                    // owner's unpushed offline edits.
+                    val local = reminderDao.getReminderById(reminder.id)
+                    if (local == null || reminder.updatedAt >= local.updatedAt) {
+                        reminderDao.insertReminder(reminder.copy(synced = true))
+                    }
                     // Schedule a local alarm so family members get the SAME notification the owner
                     // gets. Only future, still-active reminders are scheduled; re-scheduling is
                     // idempotent (PendingIntent keyed by reminder.id), so this is safe for the owner too.
